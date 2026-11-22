@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Common Interfaces and Package</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/skins/default.js"></script>
+<script src="../assets/js/wavedrom.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-this-document-describes">1  What this document describes</a></li><li class="l3"><a href="#example-walkthrough-one-command-and-its-status">1.1  Example walkthrough: one command and its status</a></li><li class="l2"><a href="#package-sgdma-pkg">2  Package sgdma_pkg</a></li><li class="l3"><a href="#sgdma-cmd-t-command-payload">2.1  sgdma_cmd_t - command payload</a></li><li class="l3"><a href="#sgdma-sts-t-status-payload">2.2  sgdma_sts_t - status payload</a></li><li class="l2"><a href="#the-valid-ready-handshake">3  The valid/ready handshake</a></li><li class="l2"><a href="#command-channel">4  Command channel</a></li><li class="l2"><a href="#status-channel">5  Status channel</a></li><li class="l2"><a href="#data-beat-channel">6  Data-beat channel</a></li><li class="l2"><a href="#external-bus-subsets">7  External bus subsets</a></li><li class="l3"><a href="#axi4-memory-mapped-masters-of-sgdma-desc-sgdma-mm-rd-sgdma-mm-wr">7.1  AXI4 (memory-mapped masters of sgdma_desc, sgdma_mm_rd, sgdma_mm_wr)</a></li><li class="l3"><a href="#axi4-lite-csr-slave-port-of-sgdma-csr">7.2  AXI4-Lite (CSR slave port of sgdma_csr)</a></li><li class="l3"><a href="#axi-stream-sgdma-axis-src-master-port-sgdma-axis-snk-slave-port">7.3  AXI-Stream (sgdma_axis_src master port, sgdma_axis_snk slave port)</a></li><li class="l2"><a href="#building-a-testbench-interface-from-this-spec">8  Building a testbench interface from this spec</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-00</div>
+<h1>Common Interfaces and Package</h1>
+<p class="subtitle">cmd / sts / data-beat channels, sgdma_pkg types, AXI4 / AXI4-Lite / AXI-Stream subsets</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-00</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-this-document-describes"><span class="num">1</span>What this document describes</h2>
+<div class="whatbox">
+<p>The SG-DMA is built from six blocks that talk to each other through <b>three kinds of simple internal channels</b>:</p>
+<ul>
+<li>a <b>command channel</b> (<code>cmd</code>): "please move <i>N</i> bytes starting at address <i>A</i>",</li>
+<li>a <b>status channel</b> (<code>sts</code>): "done, I moved <i>M</i> bytes, error yes/no",</li>
+<li>a <b>data-beat channel</b> (<code>din_*</code> / <code>dout_*</code>): the data itself, 4 bytes per clock beat.</li>
+</ul>
+<p>All three use the same <b>valid/ready handshake</b>. This document defines the handshake, the payload types in
+<code>sgdma_pkg</code>, and the subsets of AXI4, AXI4-Lite and AXI-Stream used on the external ports. Every block spec
+(SPEC-04 ... SPEC-09) refers back to these rules, and so do the interfaces you write for your testbench.</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  D["sgdma_desc&lt;br/&gt;(descriptor engine)"]
+  S["source engine&lt;br/&gt;mm_rd or axis_snk"]
+  T["destination engine&lt;br/&gt;mm_wr or axis_src"]
+  D -- "src_cmd (sgdma_cmd_t)" --&gt; S
+  S -- "src_sts (sgdma_sts_t)" --&gt; D
+  D -- "dst_cmd (sgdma_cmd_t)" --&gt; T
+  T -- "dst_sts (sgdma_sts_t)" --&gt; D
+  S == "data beats: data / keep / last" ==&gt; T
+</pre><div class="legend">thin arrows = command / status channels, thick arrow = data-beat channel; every arrow is a valid/ready channel</div><figcaption>Figure 0-1: Where the three internal channel types are used</figcaption></figure>
+<h3 id="example-walkthrough-one-command-and-its-status"><span class="num">1.1</span>Example walkthrough: one command and its status</h3>
+<ol>
+<li>The descriptor engine puts <code>cmd = {addr: 0x0000_2000, len_bytes: 10, inc_addr: 1, desc_id: 0, ...}</code> on the
+command channel and sets <code>cmd_valid = 1</code>.</li>
+<li>The read engine is idle, so it has <code>cmd_ready = 1</code>. On the next rising clock edge both are 1: the command is
+<b>transferred</b> (one handshake = one command). The descriptor engine drops <code>cmd_valid</code>.</li>
+<li>The read engine moves the data: 10 bytes = 3 beats on its <code>dout_*</code> data channel (keep = <code>1111</code>,
+<code>1111</code>, <code>0011</code>; <code>last = 1</code> on the third beat).</li>
+<li>The read engine then raises <code>sts_valid</code> with <code>sts = {desc_id: 0, err: 0, eop_seen: 0, bytes_done: 10}</code>
+and holds it until the descriptor engine answers <code>sts_ready = 1</code>.</li>
+<li>Only now does the read engine raise <code>cmd_ready</code> again for the next command.</li>
+</ol>
+<h2 id="package-sgdma-pkg"><span class="num">2</span>Package sgdma_pkg</h2>
+<p>File <code>rtl/common/sgdma_pkg.sv</code>. Import it in every interface and package that uses the types: <code>import sgdma_pkg::*;</code></p>
+<table>
+<caption>Table 0-1: sgdma_pkg parameters, encodings and helpers</caption>
+<thead><tr><th>Name</th><th>Value</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>DATA_W</code></td><td>32</td><td>data width of every data channel (bits)</td></tr>
+<tr><td><code>ADDR_W</code></td><td>32</td><td>byte address width</td></tr>
+<tr><td><code>KEEP_W</code></td><td>4</td><td>byte-enable width = DATA_W / 8</td></tr>
+<tr><td><code>MAX_BURST_BEATS</code></td><td>16</td><td>longest AXI4 burst any engine issues</td></tr>
+<tr><td><code>DESC_BYTES</code></td><td>32</td><td>size of one descriptor in memory</td></tr>
+<tr><td><code>AXI_BURST_FIXED / AXI_BURST_INCR</code></td><td>2'b00 / 2'b01</td><td>AxBURST encodings</td></tr>
+<tr><td><code>AXI_RESP_OKAY / AXI_RESP_SLVERR</code></td><td>2'b00 / 2'b10</td><td>xRESP encodings</td></tr>
+<tr><td><code>AXI_SIZE_4B</code></td><td>3'b010</td><td>AxSIZE for 4-byte beats (the only size used)</td></tr>
+<tr><td><code>sgdma_mode_e</code></td><td>MODE_M2M=0, MODE_M2S=1, MODE_S2M=2, MODE_RSVD=3</td><td>transfer mode (CSR MODE register)</td></tr>
+<tr><td><code>keep_mask(n)</code></td><td>function</td><td>byte enables for a final beat carrying n = 1..4 bytes: 0001, 0011, 0111, 1111</td></tr>
+<tr><td><code>popcount4(v)</code></td><td>function</td><td>number of 1 bits in a 4-bit value</td></tr>
+</tbody></table>
+<h3 id="sgdma-cmd-t-command-payload"><span class="num">2.1</span>sgdma_cmd_t - command payload</h3>
+<p>A <code>struct packed</code> of 59 bits. The first field listed in the source is the most significant.</p>
+<table>
+<caption>Table 0-2: sgdma_cmd_t fields</caption>
+<thead><tr><th>Field</th><th>Bits</th><th>Width</th><th>Meaning</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>desc_id</code></td><td>[58:51]</td><td>8</td><td>index of the descriptor inside the chain (0 = first). Echoed in the status.</td><td>all engines</td></tr>
+<tr><td><code>gen_eop</code></td><td>[50]</td><td>1</td><td>end-of-packet requested at the end of this command</td><td>axis_src</td></tr>
+<tr><td><code>gen_sop</code></td><td>[49]</td><td>1</td><td>start-of-packet requested at the start of this command</td><td>axis_src</td></tr>
+<tr><td><code>inc_addr</code></td><td>[48]</td><td>1</td><td>1 = incrementing address (INCR bursts), 0 = fixed address (FIXED bursts)</td><td>mm_rd, mm_wr</td></tr>
+<tr><td><code>len_bytes</code></td><td>[47:32]</td><td>16</td><td>number of bytes to move (axis_snk: size of the destination buffer). 0 is illegal.</td><td>all engines</td></tr>
+<tr><td><code>addr</code></td><td>[31:0]</td><td>32</td><td>byte address of the first byte. Must be 4-byte aligned for the memory engines.</td><td>mm_rd, mm_wr</td></tr>
+</tbody></table>
+<h3 id="sgdma-sts-t-status-payload"><span class="num">2.2</span>sgdma_sts_t - status payload</h3>
+<p>A <code>struct packed</code> of 26 bits.</p>
+<table>
+<caption>Table 0-3: sgdma_sts_t fields</caption>
+<thead><tr><th>Field</th><th>Bits</th><th>Width</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>desc_id</code></td><td>[25:18]</td><td>8</td><td>copy of <code>cmd.desc_id</code> of the command this status belongs to</td></tr>
+<tr><td><code>eop_seen</code></td><td>[17]</td><td>1</td><td>an end-of-packet was produced / observed by this command (exact meaning per engine)</td></tr>
+<tr><td><code>err</code></td><td>[16]</td><td>1</td><td>the command finished with an error</td></tr>
+<tr><td><code>bytes_done</code></td><td>[15:0]</td><td>16</td><td>bytes successfully transferred (exact meaning per engine)</td></tr>
+</tbody></table>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-PKG-001"><td><span class="sid">IF-PKG-001</span></td><td>All blocks use the parameter values of Table 0-1. Data channels are 32 bits wide with a 4-bit keep.</td></tr>
+<tr id="IF-PKG-002"><td><span class="sid">IF-PKG-002</span></td><td>The command payload has the layout of Table 0-2; fields not used by an engine are ignored by that engine.</td></tr>
+<tr id="IF-PKG-003"><td><span class="sid">IF-PKG-003</span></td><td>The status payload has the layout of Table 0-3.</td></tr>
+</tbody></table>
+<h2 id="the-valid-ready-handshake"><span class="num">3</span>The valid/ready handshake</h2>
+<p>Every internal channel has a <b>sender</b> (drives <code>valid</code> and the payload) and a <b>receiver</b> (drives <code>ready</code>). Both are synchronous to the rising edge of <code>clk</code>.</p>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',        wave: 'p........' },
+  { name: 'valid',      wave: '01...01.0' },
+  { name: 'payload',    wave: 'x=..=x==x', data: ['A', 'B', 'C', 'D'] },
+  { name: 'ready',      wave: '0..1.01..' },
+  { name: 'transfer',   wave: '0..1.01.0' }
+ ],
+ head: { text: 'valid/ready: A waits 2 cycles (back-pressure), then A, B, C, D transfer', tick: 0 },
+ foot: { text: 'a transfer happens on every rising edge where valid=1 AND ready=1' } }
+</script></div><figcaption>Figure 0-2: valid/ready handshake with back-pressure</figcaption></figure>
+<table class="req">
+<caption>Table 0-4: Handshake rules (all internal channels)</caption>
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-HS-001"><td><span class="sid">IF-HS-001</span></td><td>A transfer ("handshake") takes place on a rising edge of <code>clk</code> at which <code>valid = 1</code> and <code>ready = 1</code>. One handshake moves exactly one item (one command, one status or one data beat).</td></tr>
+<tr id="IF-HS-002"><td><span class="sid">IF-HS-002</span></td><td>Once the sender has set <code>valid = 1</code>, it keeps <code>valid = 1</code> and keeps the payload <b>stable</b> until the handshake. It may not withdraw or change the item.</td></tr>
+<tr id="IF-HS-003"><td><span class="sid">IF-HS-003</span></td><td>The sender does not wait for <code>ready</code> before raising <code>valid</code>.</td></tr>
+<tr id="IF-HS-004"><td><span class="sid">IF-HS-004</span></td><td>The receiver may set <code>ready</code> before, together with, or after <code>valid</code>, and may change <code>ready</code> in any cycle. Holding <code>ready = 0</code> is called <b>back-pressure</b>; it may last any number of cycles.</td></tr>
+<tr id="IF-HS-005"><td><span class="sid">IF-HS-005</span></td><td>The payload has no meaning while <code>valid = 0</code>; checkers ignore it.</td></tr>
+<tr id="IF-HS-006"><td><span class="sid">IF-HS-006</span></td><td>After a handshake the sender may present the next item in the very next cycle (back-to-back transfers).</td></tr>
+<tr id="IF-RST-001"><td><span class="sid">IF-RST-001</span></td><td>Reset <code>rst_n</code> is active low and asynchronous. While <code>rst_n = 0</code> every sender drives <code>valid = 0</code>. This applies to the DUT and to every testbench driver.</td></tr>
+</tbody></table>
+<h2 id="command-channel"><span class="num">4</span>Command channel</h2>
+<table>
+<caption>Table 0-5: Command channel signals</caption>
+<thead><tr><th>Signal</th><th>Width</th><th>Direction</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>cmd</code></td><td>sgdma_cmd_t</td><td>sender &rarr; receiver</td><td>the command</td></tr>
+<tr><td><code>cmd_valid</code></td><td>1</td><td>sender &rarr; receiver</td><td>command present</td></tr>
+<tr><td><code>cmd_ready</code></td><td>1</td><td>receiver &rarr; sender</td><td>receiver can take a command</td></tr>
+</tbody></table>
+<table class="req">
+<caption>Table 0-6: Command channel rules</caption>
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-CMD-001"><td><span class="sid">IF-CMD-001</span></td><td>An engine sets <code>cmd_ready = 1</code> only while it is idle. One handshake transfers one command.</td></tr>
+<tr id="IF-CMD-002"><td><span class="sid">IF-CMD-002</span></td><td>Every accepted command produces <b>exactly one</b> status on the status channel, with <code>sts.desc_id = cmd.desc_id</code>.</td></tr>
+<tr id="IF-CMD-003"><td><span class="sid">IF-CMD-003</span></td><td>An engine processes one command at a time: it accepts the next command only after the status of the current command has been transferred.</td></tr>
+<tr id="IF-CMD-004"><td><span class="sid">IF-CMD-004</span></td><td>A command with <code>len_bytes = 0</code> is illegal. The engine moves no data, makes no bus access and returns a status with <code>err = 1</code> and <code>bytes_done = 0</code>. Each engine spec lists further illegal commands.</td></tr>
+</tbody></table>
+<h2 id="status-channel"><span class="num">5</span>Status channel</h2>
+<table>
+<caption>Table 0-7: Status channel signals</caption>
+<thead><tr><th>Signal</th><th>Width</th><th>Direction</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>sts</code></td><td>sgdma_sts_t</td><td>engine &rarr; descriptor engine</td><td>the status</td></tr>
+<tr><td><code>sts_valid</code></td><td>1</td><td>engine &rarr; descriptor engine</td><td>status present</td></tr>
+<tr><td><code>sts_ready</code></td><td>1</td><td>descriptor engine &rarr; engine</td><td>status can be taken</td></tr>
+</tbody></table>
+<table class="req">
+<caption>Table 0-8: Status channel rules</caption>
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-STS-001"><td><span class="sid">IF-STS-001</span></td><td>The engine holds <code>sts_valid = 1</code> and a stable <code>sts</code> until <code>sts_ready = 1</code> (IF-HS-002).</td></tr>
+<tr id="IF-STS-002"><td><span class="sid">IF-STS-002</span></td><td>The meaning of <code>bytes_done</code> and <code>eop_seen</code> is defined by each engine spec.</td></tr>
+</tbody></table>
+<h2 id="data-beat-channel"><span class="num">6</span>Data-beat channel</h2>
+<table>
+<caption>Table 0-9: Data-beat channel signals (prefix din_ or dout_)</caption>
+<thead><tr><th>Signal</th><th>Width</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>data</code></td><td>32</td><td>four data bytes</td></tr>
+<tr><td><code>keep</code></td><td>4</td><td><code>keep[i] = 1</code>: byte lane <i>i</i> (<code>data[8*i+7:8*i]</code>) carries a valid byte</td></tr>
+<tr><td><code>last</code></td><td>1</td><td>final beat (of the command or of the packet, see block spec)</td></tr>
+<tr><td><code>valid</code></td><td>1</td><td>sender has a beat</td></tr>
+<tr><td><code>ready</code></td><td>1</td><td>receiver can take the beat</td></tr>
+</tbody></table>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',   wave: 'p.......' },
+  { name: 'valid', wave: '01.....0' },
+  { name: 'data',  wave: 'x=.===.x', data: ['B0', 'B1', 'B2', 'B3'] },
+  { name: 'keep',  wave: 'x=....=x', data: ['1111', '0011'] },
+  { name: 'last',  wave: '0.....10' },
+  { name: 'ready', wave: '1.01.01.' }
+ ],
+ head: { text: '14 bytes = 4 beats; the final beat carries 2 bytes (keep 0011) and last=1' } }
+</script></div><figcaption>Figure 0-3: Data beats of a 14-byte transfer with receiver back-pressure</figcaption></figure>
+<table class="req">
+<caption>Table 0-10: Data-beat channel rules</caption>
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-DAT-001"><td><span class="sid">IF-DAT-001</span></td><td>Byte order is little-endian: lane 0 (<code>data[7:0]</code>) carries the byte at the lowest address, lane 3 (<code>data[31:24]</code>) the byte at the highest address of the beat.</td></tr>
+<tr id="IF-DAT-002"><td><span class="sid">IF-DAT-002</span></td><td>A beat carries 1 to 4 bytes. When a transfer length is not a multiple of 4, the final beat uses the low lanes only: keep = <code>0001</code>, <code>0011</code> or <code>0111</code> (see <code>keep_mask()</code>).</td></tr>
+<tr id="IF-DAT-003"><td><span class="sid">IF-DAT-003</span></td><td><code>last = 1</code> marks the final beat. Each block spec says exactly when its output sets <code>last</code> and how it reacts to <code>last</code> on its input.</td></tr>
+<tr id="IF-DAT-004"><td><span class="sid">IF-DAT-004</span></td><td>Beats are transferred in address order; no beat is duplicated or dropped.</td></tr>
+</tbody></table>
+<h2 id="external-bus-subsets"><span class="num">7</span>External bus subsets</h2>
+<h3 id="axi4-memory-mapped-masters-of-sgdma-desc-sgdma-mm-rd-sgdma-mm-wr"><span class="num">7.1</span>AXI4 (memory-mapped masters of sgdma_desc, sgdma_mm_rd, sgdma_mm_wr)</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-AXI-001"><td><span class="sid">IF-AXI-001</span></td><td>Every burst uses 4-byte beats: <code>AxSIZE = 3'b010</code>.</td></tr>
+<tr id="IF-AXI-002"><td><span class="sid">IF-AXI-002</span></td><td>Only INCR (<code>AxBURST = 2'b01</code>) and FIXED (<code>2'b00</code>) bursts are used; WRAP is never used.</td></tr>
+<tr id="IF-AXI-003"><td><span class="sid">IF-AXI-003</span></td><td>A burst has at most 16 beats: <code>AxLEN</code> &le; 15. The number of beats is <code>AxLEN + 1</code>.</td></tr>
+<tr id="IF-AXI-004"><td><span class="sid">IF-AXI-004</span></td><td>An INCR burst never crosses a 4 KB address boundary: the first and the last byte of the burst have the same <code>addr[31:12]</code>.</td></tr>
+<tr id="IF-AXI-005"><td><span class="sid">IF-AXI-005</span></td><td>A master has at most one burst outstanding per direction: the next AR is issued only after the RLAST beat of the previous read burst; the next AW only after the B response of the previous write burst.</td></tr>
+<tr id="IF-AXI-006"><td><span class="sid">IF-AXI-006</span></td><td>A write burst has exactly <code>AWLEN + 1</code> W beats; <code>WLAST = 1</code> on the last one and only on the last one. W beats of a burst follow (or coincide with) its AW.</td></tr>
+<tr id="IF-AXI-007"><td><span class="sid">IF-AXI-007</span></td><td>Responses are OKAY (<code>2'b00</code>) or SLVERR (<code>2'b10</code>). Anything other than OKAY is an error.</td></tr>
+<tr id="IF-AXI-008"><td><span class="sid">IF-AXI-008</span></td><td>All AXI valid/ready pairs follow IF-HS-001 ... IF-HS-004 (AXI uses the same handshake).</td></tr>
+</tbody></table>
+<p>Not present on these ports: ID, USER, QOS, CACHE, LOCK, PROT, REGION signals.</p>
+<h3 id="axi4-lite-csr-slave-port-of-sgdma-csr"><span class="num">7.2</span>AXI4-Lite (CSR slave port of sgdma_csr)</h3>
+<p>Single-beat 32-bit reads and writes, five channels (AW, W, B, AR, R), byte strobes on W, responses OKAY or SLVERR. The CSR decodes the low 8 address bits. Details in SPEC-04.</p>
+<h3 id="axi-stream-sgdma-axis-src-master-port-sgdma-axis-snk-slave-port"><span class="num">7.3</span>AXI-Stream (sgdma_axis_src master port, sgdma_axis_snk slave port)</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="IF-AXS-001"><td><span class="sid">IF-AXS-001</span></td><td>A stream beat is transferred on a rising edge with <code>TVALID = 1</code> and <code>TREADY = 1</code>. Once <code>TVALID = 1</code>, the master keeps TVALID and TDATA / TKEEP / TLAST / TUSER stable until the handshake.</td></tr>
+<tr id="IF-AXS-002"><td><span class="sid">IF-AXS-002</span></td><td><code>TKEEP[i] = 1</code>: byte lane <i>i</i> is valid (IF-DAT-001 lane order). <code>TLAST = 1</code>: final beat of a packet.</td></tr>
+<tr id="IF-AXS-003"><td><span class="sid">IF-AXS-003</span></td><td><code>TUSER</code> (master port of sgdma_axis_src only) is 1 on the first beat of a packet (start-of-packet, SOP) and 0 on all other beats.</td></tr>
+</tbody></table>
+<h2 id="building-a-testbench-interface-from-this-spec"><span class="num">8</span>Building a testbench interface from this spec</h2>
+<p>Each block spec lists its simple valid/ready ports. For each <b>group</b> of ports (one channel, or one set of plain control wires) you write one SystemVerilog <code>interface</code>. A good interface contains:</p>
+<ol>
+<li>the clock and reset as ports: <code>interface my_cmd_if (input logic clk, input logic rst_n);</code></li>
+<li>one signal per DUT port of the group, with the same width/type (<code>sgdma_cmd_t cmd;</code> needs <code>import sgdma_pkg::*;</code>),</li>
+<li>clocking blocks: one for a driver on the sender side, one for a driver on the receiver side (if you need it), one
+for monitors (inputs only),</li>
+<li>optionally: SystemVerilog assertions for IF-HS-002 (payload stable while waiting) and IF-RST-001.</li>
+</ol>
+<pre class="code"><code>interface toy_chan_if (input logic clk, input logic rst_n);   // made-up example, not an SG-DMA port
+  import sgdma_pkg::*;
+  logic [7:0] payload;
+  logic       valid;
+  logic       ready;
+
+  clocking snd_cb @(posedge clk);          // a driver that SENDS items
+    default input #1step output #1;
+    output payload, valid;
+    input  ready;
+  endclocking
+
+  clocking rcv_cb @(posedge clk);          // a driver that RECEIVES items (drives ready)
+    default input #1step output #1;
+    input  payload, valid;
+    output ready;
+  endclocking
+
+  clocking mon_cb @(posedge clk);          // monitors only sample
+    default input #1step;
+    input payload, valid, ready;
+  endclocking
+
+  // IF-HS-002 style check: payload stable while valid waits for ready
+  property p_stable;
+    @(posedge clk) disable iff (!rst_n) (valid &amp;&amp; !ready) |=&gt; (valid &amp;&amp; $stable(payload));
+  endproperty
+  a_stable: assert property (p_stable) else $error("payload changed while waiting for ready");
+endinterface</code></pre>
+<div class="tip">The table in your <code>tb_connections.html</code> lists, for every DUT port, a suggested interface signal name, the direction and the suggested <code>config_db</code> name.</div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

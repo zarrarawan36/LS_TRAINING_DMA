@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Overview: sgdma_top and Data FIFO</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-the-sg-dma-does">1  What the SG-DMA does</a></li><li class="l2"><a href="#example-walkthrough-an-m2m-copy-of-102-bytes">2  Example walkthrough: an M2M copy of 102 bytes</a></li><li class="l2"><a href="#transfer-modes">3  Transfer modes</a></li><li class="l2"><a href="#data-fifo-sgdma-data-fifo">4  Data FIFO (sgdma_data_fifo)</a></li><li class="l2"><a href="#who-verifies-what">5  Who verifies what</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-10</div>
+<h1>System Overview: sgdma_top and Data FIFO</h1>
+<p class="subtitle">Read this first: what the SG-DMA does, the three modes, data flow</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-10</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-the-sg-dma-does"><span class="num">1</span>What the SG-DMA does</h2>
+<div class="whatbox"><p>The SG-DMA (scatter-gather direct memory access) controller moves data without help from the CPU.
+Software prepares a list of jobs (<b>descriptors</b>) in memory, writes the address of the first one into a register and sets
+<b>RUN</b>. The hardware then fetches each descriptor, moves the data it describes, writes a completion status back into the
+descriptor and continues with the next one. At the end it sets <b>DONE</b> (or <b>ERROR</b>) and can raise an interrupt.</p>
+<p>Data can go from memory to memory (<b>M2M</b>), from memory to an AXI-Stream output (<b>M2S</b>) or from an AXI-Stream
+input to memory (<b>S2M</b>). The design is inspired by the scatter-gather DMA controller core described in Intel's
+Embedded Peripherals IP User Guide (UG-01085), re-implemented with AXI4, AXI4-Lite and AXI-Stream.</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  CPU["CPU / software"] -- "AXI4-Lite s_axil_*" --&gt; TOP
+  TOP -- irq --&gt; CPU
+  subgraph TOP["sgdma_top"]
+    direction TB
+    X[" "]
+  end
+  TOP -- "m0_* AXI4 (descriptors)" --&gt; MEM[("memory")]
+  TOP -- "m1_* AXI4 read (data)" --&gt; MEM
+  TOP -- "m2_* AXI4 write (data)" --&gt; MEM
+  TOP -- "m_axis_* (M2S out)" --&gt; SNK["stream consumer"]
+  SRC["stream producer"] -- "s_axis_* (S2M in)" --&gt; TOP
+  style X fill:none,stroke:none
+</pre><figcaption>Figure 10-1: sgdma_top external interfaces</figcaption></figure>
+<figure><pre class="mermaid">
+flowchart LR
+  AXIL["AXI4-Lite"] --&gt; CSR["sgdma_csr&lt;br/&gt;(J1)"]
+  CSR -- "ctrl_run / ctrl_stop / ctrl_soft_rst&lt;br/&gt;cfg_next_desc" --&gt; DESC["sgdma_desc&lt;br/&gt;(J2)"]
+  DESC -- "sts_busy / sts_done / sts_error" --&gt; CSR
+  CSR -- irq --&gt; IRQ(("irq"))
+  DESC &lt;-- "m0 AXI4" --&gt; M0[("mem")]
+  DESC -- "src_cmd / src_sts" --&gt; RD["sgdma_mm_rd&lt;br/&gt;(J3)"]
+  DESC -- "src_cmd / src_sts" --&gt; SNK["sgdma_axis_snk&lt;br/&gt;(J6)"]
+  DESC -- "dst_cmd / dst_sts" --&gt; WR["sgdma_mm_wr&lt;br/&gt;(J4)"]
+  DESC -- "dst_cmd / dst_sts" --&gt; SRC["sgdma_axis_src&lt;br/&gt;(J5)"]
+  M1[("mem")] -- "m1 AXI4 read" --&gt; RD
+  RD == "M2M" ==&gt; FIFO["sgdma_data_fifo&lt;br/&gt;32 beats"]
+  FIFO == "M2M" ==&gt; WR
+  RD == "M2S" ==&gt; SRC
+  SAXIS["s_axis"] ==&gt; SNK
+  SNK == "S2M" ==&gt; WR
+  WR -- "m2 AXI4 write" --&gt; M2[("mem")]
+  SRC ==&gt; MAXIS["m_axis"]
+</pre><figcaption>Figure 10-2: Internal structure (thick arrows = data-beat channels; Jn = block verified by engineer n)</figcaption></figure>
+<h2 id="example-walkthrough-an-m2m-copy-of-102-bytes"><span class="num">2</span>Example walkthrough: an M2M copy of 102 bytes</h2>
+<ol>
+<li>Software writes the descriptor of SPEC-01 Table 1-1 at 0x1000 (SRC 0x2000, DST 0x3000, LENGTH 102, flags OWNED|INC_SRC|INC_DST|GEN_SOP|GEN_EOP, NEXT 0).</li>
+<li>Software writes CSR <code>MODE = 0</code> (M2M), <code>NEXT_DESC = 0x1000</code>, <code>IRQ_ENABLE = 1</code>, then <code>CONTROL = 1</code> (RUN).</li>
+<li>sgdma_csr raises <code>ctrl_run</code>. sgdma_desc sees the rising edge, raises <code>sts_busy</code> and reads 8 words from 0x1000 (one 8-beat INCR burst on m0).</li>
+<li>OWNED = 1 and LENGTH &ne; 0, so sgdma_desc sends <code>src_cmd {addr 0x2000, len 102, inc 1, id 0}</code> to sgdma_mm_rd and <code>dst_cmd {addr 0x3000, len 102, inc 1, id 0}</code> to sgdma_mm_wr.</li>
+<li>sgdma_mm_rd reads 26 beats on m1 (bursts of 16 + 10 beats). The beats go through the data FIFO into sgdma_mm_wr, which writes them on m2 (16 + 10 beats; the last beat has WSTRB = 0011).</li>
+<li>Both engines return a status (<code>bytes_done = 102</code>). sgdma_desc writes STATUS = 0x0002_0066 to 0x1010, then CTRL with OWNED cleared to 0x1008.</li>
+<li>NEXT = 0: sgdma_desc pulses <code>sts_done</code> and drops <code>sts_busy</code>. sgdma_csr sets STATUS.DONE, clears RUN, sets IRQ_STATUS.DONE; <code>irq</code> rises because IRQ_ENABLE.DONE = 1.</li>
+<li>Software reads STATUS, then writes 1 to IRQ_STATUS bit 0; <code>irq</code> falls.</li>
+</ol>
+<figure><pre class="mermaid">
+sequenceDiagram
+  participant SW as Software
+  participant CSR as sgdma_csr
+  participant D as sgdma_desc
+  participant R as sgdma_mm_rd
+  participant W as sgdma_mm_wr
+  participant M as Memory
+  SW-&gt;&gt;CSR: NEXT_DESC=0x1000, CONTROL.RUN=1
+  CSR-&gt;&gt;D: ctrl_run rises
+  D-&gt;&gt;M: AR 0x1000, 8 beats
+  M--&gt;&gt;D: 8 descriptor words
+  par source
+    D-&gt;&gt;R: src_cmd (0x2000, 102 B)
+    R-&gt;&gt;M: AR bursts
+    M--&gt;&gt;R: data
+  and destination
+    D-&gt;&gt;W: dst_cmd (0x3000, 102 B)
+  end
+  R-&gt;&gt;W: 26 data beats (via FIFO)
+  W-&gt;&gt;M: AW/W bursts
+  M--&gt;&gt;W: B OKAY
+  R--&gt;&gt;D: src_sts (102 B)
+  W--&gt;&gt;D: dst_sts (102 B, eop)
+  D-&gt;&gt;M: write STATUS, then CTRL (OWNED=0)
+  D-&gt;&gt;CSR: sts_done pulse
+  CSR-&gt;&gt;SW: irq
+</pre><figcaption>Figure 10-3: Message sequence of the M2M example</figcaption></figure>
+<h2 id="transfer-modes"><span class="num">3</span>Transfer modes</h2>
+<table>
+<caption>Table 10-1: Mode routing inside sgdma_top</caption>
+<thead><tr><th>MODE</th><th>Name</th><th>Source engine (src_cmd)</th><th>Destination engine (dst_cmd)</th><th>Data path</th></tr></thead><tbody>
+<tr><td>0</td><td>M2M</td><td>sgdma_mm_rd</td><td>sgdma_mm_wr</td><td>mm_rd dout &rarr; data FIFO &rarr; mm_wr din</td></tr>
+<tr><td>1</td><td>M2S</td><td>sgdma_mm_rd</td><td>sgdma_axis_src</td><td>mm_rd dout &rarr; axis_src din &rarr; m_axis</td></tr>
+<tr><td>2</td><td>S2M</td><td>sgdma_axis_snk</td><td>sgdma_mm_wr</td><td>s_axis &rarr; axis_snk dout &rarr; mm_wr din</td></tr>
+<tr><td>3</td><td>reserved</td><td>-</td><td>-</td><td>writes of 3 to MODE are ignored by the CSR</td></tr>
+</tbody></table>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="TOP-MOD-001"><td><span class="sid">TOP-MOD-001</span></td><td>The mode is taken from CSR MODE (<code>cfg_mode</code>). The CSR ignores MODE writes while BUSY = 1, so the routing never changes during a chain.</td></tr>
+<tr id="TOP-MOD-002"><td><span class="sid">TOP-MOD-002</span></td><td><code>src_cmd</code> goes to sgdma_mm_rd in M2M/M2S and to sgdma_axis_snk in S2M; <code>dst_cmd</code> goes to sgdma_mm_wr in M2M/S2M and to sgdma_axis_src in M2S. Engines that are not selected never see <code>cmd_valid = 1</code>.</td></tr>
+<tr id="TOP-MOD-003"><td><span class="sid">TOP-MOD-003</span></td><td>The selected engines' status channels are routed back to <code>src_sts</code> / <code>dst_sts</code> of sgdma_desc.</td></tr>
+<tr id="TOP-AXI-001"><td><span class="sid">TOP-AXI-001</span></td><td>Three independent AXI4 masters: m0 = descriptor engine (read + write), m1 = read engine (read channels only), m2 = write engine (write channels only).</td></tr>
+</tbody></table>
+<h2 id="data-fifo-sgdma-data-fifo"><span class="num">4</span>Data FIFO (sgdma_data_fifo)</h2>
+<p>Synchronous first-word-fall-through FIFO between sgdma_mm_rd and sgdma_mm_wr in M2M mode.</p>
+<table>
+<caption>Table 10-2: sgdma_data_fifo ports (parameter DEPTH = 32)</caption>
+<thead><tr><th>Port</th><th>Dir</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>flush</code></td><td>in</td><td>connected to <code>ctrl_soft_rst</code>: empties the FIFO</td></tr>
+<tr><td><code>in_data/in_keep/in_last/in_valid</code>, <code>in_ready</code></td><td>in / out</td><td>write side (data-beat channel, SPEC-00)</td></tr>
+<tr><td><code>out_data/out_keep/out_last/out_valid</code>, <code>out_ready</code></td><td>out / in</td><td>read side (data-beat channel)</td></tr>
+</tbody></table>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="TOP-FIFO-001"><td><span class="sid">TOP-FIFO-001</span></td><td>Each entry stores one beat {last, keep, data}. <code>in_ready = 1</code> while not full; <code>out_valid = 1</code> while not empty; the oldest entry is visible on <code>out_*</code> (first-word fall-through).</td></tr>
+<tr id="TOP-FIFO-002"><td><span class="sid">TOP-FIFO-002</span></td><td><code>flush</code> (software reset) empties the FIFO in one cycle.</td></tr>
+</tbody></table>
+<h2 id="who-verifies-what"><span class="num">5</span>Who verifies what</h2>
+<table>
+<caption>Table 10-3: Block-level verification assignments</caption>
+<thead><tr><th>Engineer</th><th>Block</th><th>Spec</th><th>Provided bus agent(s) in the testbench</th></tr></thead><tbody>
+<tr><td>J1</td><td>sgdma_csr</td><td>SPEC-04</td><td>axi4lite_agent (active master)</td></tr>
+<tr><td>J2</td><td>sgdma_desc</td><td>SPEC-05</td><td>axi4_agent (passive monitor) + sgdma_axi_mem</td></tr>
+<tr><td>J3</td><td>sgdma_mm_rd</td><td>SPEC-06</td><td>axi4_agent (passive monitor) + sgdma_axi_mem</td></tr>
+<tr><td>J4</td><td>sgdma_mm_wr</td><td>SPEC-07</td><td>axi4_agent (passive monitor) + sgdma_axi_mem</td></tr>
+<tr><td>J5</td><td>sgdma_axis_src</td><td>SPEC-08</td><td>axis_agent (slave role + monitor)</td></tr>
+<tr><td>J6</td><td>sgdma_axis_snk</td><td>SPEC-09</td><td>axis_agent (master role + monitor)</td></tr>
+</tbody></table>
+<div class="note">Each block is verified stand-alone with its own testbench. The ports that connect it to its neighbours (for example <code>src_cmd</code> of sgdma_desc) are driven and checked by agents you write, which model the neighbour block. sgdma_top and sgdma_data_fifo are integrated and verified separately.</div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

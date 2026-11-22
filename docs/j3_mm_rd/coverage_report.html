@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J3 sgdma_mm_rd - functional coverage report</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/spec.js"></script>
+<script src="../assets/js/editable.js"></script>
+</head>
+<body class="paged" data-store-key="sgdma.j3_mm_rd.coverage_report.v2" data-export-name="j3_mm_rd_coverage_report" data-deliv-base="../../coverage/">
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../j3_mm_rd/README.html">README</a> <a href="../j3_mm_rd/tb_connections.html">TB connections</a> <a href="../j3_mm_rd/testplan.html">Test plan</a> <a href="../j3_mm_rd/coverage_report.html">Coverage report</a> <a href="../j3_mm_rd/bug_report.html">Bug reports</a> <a href="../specs/06_sgdma_mm_rd.html">sgdma_mm_rd spec</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#how-to-fill-this-report">1  How to fill this report</a></li><li class="l2"><a href="#coverage-results">2  Coverage results</a></li><li class="l2"><a href="#coverage-summary-screenshot-optional">3  Coverage summary screenshot (optional)</a></li><li class="l2"><a href="#summary">4  Summary</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">J3-COVREP</div>
+<h1>J3 sgdma_mm_rd - functional coverage report</h1>
+<p class="subtitle">Editable: goals, achieved coverage, holes and justifications</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> J3-COVREP</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td><td><b>IP:</b> J3 sgdma_mm_rd</td></tr></table>
+</div>
+<table class="form edit fixed" id="cr-head" data-save data-title="Header"><tbody>
+<tr><th class="ro">Owner</th><td>&lt;your name&gt;</td></tr>
+<tr><th class="ro">Block</th><td>sgdma_mm_rd</td></tr>
+<tr><th class="ro">Date</th><td>&lt;date&gt;</td></tr>
+<tr><th class="ro">Simulator / version</th><td></td></tr>
+<tr><th class="ro">Regression (command, number of tests and seeds)</th><td>make regress - &lt;n&gt; runs</td></tr>
+<tr><th class="ro">Overall functional coverage</th><td>&lt;xx.x %&gt;</td></tr>
+<tr><th class="ro">Test plan version used</th><td>v&lt;n&gt;</td></tr>
+</tbody></table>
+<h2 id="how-to-fill-this-report"><span class="num">1</span>How to fill this report</h2>
+<div class="info"><ul>
+<li>One row per coverpoint or cross of your test plan's coverage table.</li>
+<li><b>Achieved</b> is the merged result of the whole regression, not of a single seed.</li>
+<li>For every coverpoint below its goal list the <b>holes</b> (bins not hit) and either the test that closes them or a
+<b>justification</b> (for example: unreachable by design, illegal by spec, agreed with the reviewer).</li>
+<li>Rows in grey italics are examples; replace them.</li>
+</ul></div>
+<div class="note">Collecting the numbers: let your coverage collector print, in its <code>report_phase</code>, the coverage of
+each coverpoint (<code>cg.cp.get_coverage()</code> / <code>get_inst_coverage()</code>). To merge seeds use your simulator's merge tool
+(VCS <code>urg</code>, Questa <code>vcover merge</code>, Xcelium <code>imc</code>). If your simulator does not support covergroups,
+implement the same bins as counters in the collector, write the hit counts to a file per run and add them up.</div>
+<h2 id="coverage-results"><span class="num">2</span>Coverage results</h2>
+<table class="edit" id="cr-table" data-save data-title="Coverage results"><thead><tr><th>Covergroup</th><th>Coverpoint / cross</th><th>Goal</th><th>Achieved</th><th>Holes</th><th>Justification / closing plan</th><th>Closing test(s)</th></tr></thead><tbody><tr class="example"><td>cg_cmd</td><td>cp_len</td><td>100 %</td><td>&lt;xx %&gt;</td><td>&lt;bins not hit&gt;</td><td>&lt;closing plan or justification&gt;</td><td>&lt;test name, seeds&gt;</td></tr><tr class="example"><td>cg_cmd</td><td>cp_inc x cp_len_mod4</td><td>100 %</td><td>&lt;xx %&gt;</td><td>&lt;bins not hit&gt;</td><td>&lt;closing plan or justification&gt;</td><td>&lt;test name, seeds&gt;</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table>
+<h2 id="coverage-summary-screenshot-optional"><span class="num">3</span>Coverage summary screenshot (optional)</h2>
+<p>Optional: a screenshot of your simulator's coverage summary (merged regression) or a chart of coverage over the regression. Images are kept in <code>coverage/diagrams/</code> of your deliverables folder.</p>
+<div class="imgslot" id="cr-shot" data-save data-slot="coverage_summary" data-label="Insert image" data-empty="Optional: insert a coverage summary screenshot (PNG / SVG / JPG)."><div class="slot-view"><div class="slot-empty">Optional: insert a coverage summary screenshot (PNG / SVG / JPG).</div></div><div class="slot-ctl"><button type="button" class="btn slot-insert">Insert image</button><button type="button" class="btn slot-remove" hidden>Remove</button><span class="slot-info"></span></div><div class="slot-cap editblock">Figure: merged functional coverage summary</div></div>
+<h2 id="summary"><span class="num">4</span>Summary</h2>
+<div class="editblock" id="cr-summary" data-save><p>Overall result, remaining risks, what you would add with more time.</p></div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

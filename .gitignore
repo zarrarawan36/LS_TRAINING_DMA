@@ -1,0 +1,17 @@
+﻿# Simulation/build outputs
+sim/build/
+sim/logs/
+*.vcd
+*.wlf
+*.fsdb
+*.log
+*.jou
+*.pb
+work/
+transcript
+xrun.history
+xcelium.d/
+INCA_libs/
+csrc/
+simv*
+ucli.key

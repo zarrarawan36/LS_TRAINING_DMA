@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Descriptor Format and Register Map Summary</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/skins/default.js"></script>
+<script src="../assets/js/wavedrom.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-a-descriptor-is">1  What a descriptor is</a></li><li class="l3"><a href="#example-one-descriptor-decoded">1.1  Example: one descriptor, decoded</a></li><li class="l2"><a href="#descriptor-layout">2  Descriptor layout</a></li><li class="l3"><a href="#field-use-per-mode">2.1  Field use per mode</a></li><li class="l2"><a href="#register-map-summary">3  Register map summary</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-01</div>
+<h1>Descriptor Format and Register Map Summary</h1>
+<p class="subtitle">32-byte descriptor layout, flags, status write-back, chain rules, CSR map summary</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-01</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-a-descriptor-is"><span class="num">1</span>What a descriptor is</h2>
+<div class="whatbox">
+<p>A <b>descriptor</b> is a 32-byte record that software writes into memory. It tells the DMA <i>one</i> job:
+"copy LENGTH bytes from SRC to DST". Each descriptor also holds the address of the <b>next</b> descriptor, so several
+jobs form a <b>chain</b> (a linked list). Software writes the address of the first descriptor into the CSR
+<code>NEXT_DESC</code> register and sets <code>RUN</code>; the descriptor engine then walks the chain on its own.</p>
+<p>After finishing a descriptor, the hardware writes a <b>status word</b> back into the descriptor and clears its
+<b>OWNED</b> flag, so software can see which jobs are done.</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  R["CSR NEXT_DESC&lt;br/&gt;0x0000_1000"] --&gt; A
+  subgraph MEM["memory"]
+    A["descriptor @0x1000&lt;br/&gt;SRC, DST, CTRL&lt;br/&gt;NEXT = 0x1020"] --&gt; B["descriptor @0x1020&lt;br/&gt;SRC, DST, CTRL&lt;br/&gt;NEXT = 0x1100"]
+    B --&gt; C["descriptor @0x1100&lt;br/&gt;SRC, DST, CTRL&lt;br/&gt;NEXT = 0"]
+  end
+  C --&gt; E(("end of chain"))
+</pre><figcaption>Figure 1-1: A chain of three descriptors</figcaption></figure>
+<h3 id="example-one-descriptor-decoded"><span class="num">1.1</span>Example: one descriptor, decoded</h3>
+<table>
+<caption>Table 1-1: Example descriptor at address 0x0000_1000 (M2M copy of 102 bytes)</caption>
+<thead><tr><th>Offset</th><th>Value</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>0x00 SRC_ADDR</td><td><code>0x0000_2000</code></td><td>read the data from 0x2000</td></tr>
+<tr><td>0x04 DST_ADDR</td><td><code>0x0000_3000</code></td><td>write the data to 0x3000</td></tr>
+<tr><td>0x08 CTRL</td><td><code>0x001F_0066</code></td><td>LENGTH = 0x66 = 102 bytes; OWNED, INC_SRC, INC_DST, GEN_SOP, GEN_EOP all 1</td></tr>
+<tr><td>0x0C NEXT_DESC</td><td><code>0x0000_0000</code></td><td>last descriptor of the chain</td></tr>
+<tr><td>0x10 STATUS</td><td><code>0x0000_0000</code></td><td>written by the hardware: after the job it becomes <code>0x0002_0066</code> (EOP = 1, ERR = 0, BYTES = 102)</td></tr>
+<tr><td>0x14..0x1C</td><td>any</td><td>reserved, ignored</td></tr>
+</tbody></table>
+<p>After the job the hardware also rewrites CTRL as <code>0x001E_0066</code> (OWNED cleared, all other bits unchanged).</p>
+<h2 id="descriptor-layout"><span class="num">2</span>Descriptor layout</h2>
+<table>
+<caption>Table 1-2: Descriptor words (32 bytes, little-endian 32-bit words)</caption>
+<thead><tr><th>Offset</th><th>Word</th><th>Name</th><th>Written by</th><th>Description</th></tr></thead><tbody>
+<tr><td>0x00</td><td>0</td><td>SRC_ADDR</td><td>software</td><td>source byte address (M2M, M2S). Must be 4-byte aligned. Ignored in S2M.</td></tr>
+<tr><td>0x04</td><td>1</td><td>DST_ADDR</td><td>software</td><td>destination byte address (M2M, S2M). Must be 4-byte aligned. Ignored in M2S.</td></tr>
+<tr><td>0x08</td><td>2</td><td>CTRL</td><td>software; hardware clears OWNED</td><td><code>[15:0]</code> LENGTH, <code>[31:16]</code> flags (Table 1-3)</td></tr>
+<tr><td>0x0C</td><td>3</td><td>NEXT_DESC</td><td>software</td><td>address of the next descriptor; <code>[4:0]</code> ignored; 0 = this is the last one</td></tr>
+<tr><td>0x10</td><td>4</td><td>STATUS</td><td>hardware</td><td>completion status (Table 1-4)</td></tr>
+<tr><td>0x14-0x1C</td><td>5-7</td><td>reserved</td><td>-</td><td>fetched, ignored, never written by the hardware</td></tr>
+</tbody></table>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ reg: [
+  { bits: 16, name: 'LENGTH (bytes)', type: 2 },
+  { bits: 1, name: 'OWNED', type: 4 },
+  { bits: 1, name: 'INC_SRC', type: 3 },
+  { bits: 1, name: 'INC_DST', type: 3 },
+  { bits: 1, name: 'GEN_SOP', type: 5 },
+  { bits: 1, name: 'GEN_EOP', type: 5 },
+  { bits: 11, name: 'reserved' }
+ ], config: { bits: 32, lanes: 2, hspace: 900 } }
+</script></div><figcaption>Figure 1-2: CTRL word (offset 0x08)</figcaption></figure>
+<table>
+<caption>Table 1-3: CTRL fields</caption>
+<thead><tr><th>Bits</th><th>Name</th><th>Description</th></tr></thead><tbody>
+<tr><td>[15:0]</td><td>LENGTH</td><td>number of bytes of this job, 1 ... 65535. 0 = descriptor error. In S2M mode LENGTH is the size of the destination buffer and must be a multiple of 4.</td></tr>
+<tr><td>[16]</td><td>OWNED</td><td>1 = the descriptor belongs to the hardware and may be processed. The hardware clears it after the write-back. 0 = the chain ends here (the descriptor is not processed).</td></tr>
+<tr><td>[17]</td><td>INC_SRC</td><td>1 = source address increments (normal buffer), 0 = fixed source address (e.g. a FIFO register)</td></tr>
+<tr><td>[18]</td><td>INC_DST</td><td>1 = destination address increments, 0 = fixed destination address</td></tr>
+<tr><td>[19]</td><td>GEN_SOP</td><td>M2S: the first stream beat of this job carries TUSER (start of packet)</td></tr>
+<tr><td>[20]</td><td>GEN_EOP</td><td>M2S: the last stream beat of this job carries TLAST (end of packet)</td></tr>
+<tr><td>[31:21]</td><td>reserved</td><td>software writes 0; the hardware keeps the value when it rewrites CTRL</td></tr>
+</tbody></table>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ reg: [
+  { bits: 16, name: 'BYTES', type: 2 },
+  { bits: 1, name: 'ERR', type: 4 },
+  { bits: 1, name: 'EOP', type: 5 },
+  { bits: 14, name: '0' }
+ ], config: { bits: 32, lanes: 2, hspace: 900 } }
+</script></div><figcaption>Figure 1-3: STATUS word (offset 0x10), written by the hardware</figcaption></figure>
+<table>
+<caption>Table 1-4: STATUS fields</caption>
+<thead><tr><th>Bits</th><th>Name</th><th>Description</th></tr></thead><tbody>
+<tr><td>[15:0]</td><td>BYTES</td><td>bytes transferred, as reported by the <b>destination</b> engine (<code>dst_sts.bytes_done</code>). 0 for a zero-length descriptor.</td></tr>
+<tr><td>[16]</td><td>ERR</td><td>1 = the job failed (source or destination engine reported an error, or LENGTH = 0)</td></tr>
+<tr><td>[17]</td><td>EOP</td><td>1 = an end-of-packet was seen by the source or destination engine</td></tr>
+<tr><td>[31:18]</td><td>-</td><td>always 0</td></tr>
+</tbody></table>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="DESC-FMT-001"><td><span class="sid">DESC-FMT-001</span></td><td>A descriptor is 32 bytes, 32-byte aligned. The hardware ignores bits [4:0] of every descriptor pointer (CSR NEXT_DESC and the NEXT_DESC word) and uses <code>pointer & 0xFFFF_FFE0</code>.</td></tr>
+<tr id="DESC-FMT-002"><td><span class="sid">DESC-FMT-002</span></td><td>Word layout as in Table 1-2; multi-byte values are little-endian.</td></tr>
+<tr id="DESC-FLG-001"><td><span class="sid">DESC-FLG-001</span></td><td>A descriptor is processed only if OWNED = 1. This check is made for every descriptor of the chain, the first one included.</td></tr>
+<tr id="DESC-FLG-002"><td><span class="sid">DESC-FLG-002</span></td><td>INC_SRC / INC_DST select incrementing (1) or fixed (0) addressing of the source / destination engine.</td></tr>
+<tr id="DESC-FLG-003"><td><span class="sid">DESC-FLG-003</span></td><td>GEN_SOP / GEN_EOP are passed to the engines; they control packet framing in M2S mode.</td></tr>
+<tr id="DESC-WB-001"><td><span class="sid">DESC-WB-001</span></td><td>After a processed descriptor the hardware writes the STATUS word (Table 1-4) to offset 0x10, <b>then</b> writes CTRL back to offset 0x08 with OWNED = 0 and all other CTRL bits unchanged.</td></tr>
+<tr id="DESC-WB-002"><td><span class="sid">DESC-WB-002</span></td><td>STATUS.BYTES is the destination engine's <code>bytes_done</code>; STATUS.ERR is the OR of both engines' <code>err</code>; STATUS.EOP is the OR of both engines' <code>eop_seen</code>.</td></tr>
+<tr id="DESC-WB-003"><td><span class="sid">DESC-WB-003</span></td><td>The hardware never writes SRC_ADDR, DST_ADDR, NEXT_DESC or the reserved words.</td></tr>
+<tr id="DESC-CHN-001"><td><span class="sid">DESC-CHN-001</span></td><td>The chain ends (CSR DONE) after a descriptor whose NEXT_DESC is 0, or when a descriptor with OWNED = 0 is fetched (that descriptor is not written back). Errors end the chain with CSR ERROR (SPEC-05).</td></tr>
+</tbody></table>
+<div class="caution">Software must not change a descriptor while the DMA is busy, and must set OWNED = 1 in every descriptor it wants processed.</div>
+<h3 id="field-use-per-mode"><span class="num">2.1</span>Field use per mode</h3>
+<table>
+<caption>Table 1-5: Descriptor fields per transfer mode</caption>
+<thead><tr><th>Field</th><th>M2M (memory to memory)</th><th>M2S (memory to stream)</th><th>S2M (stream to memory)</th></tr></thead><tbody>
+<tr><td>SRC_ADDR</td><td>read address</td><td>read address</td><td>ignored</td></tr>
+<tr><td>DST_ADDR</td><td>write address</td><td>ignored</td><td>write address</td></tr>
+<tr><td>LENGTH</td><td>bytes to copy</td><td>bytes to send</td><td>buffer size (multiple of 4); the packet may be shorter</td></tr>
+<tr><td>INC_SRC</td><td>used</td><td>used</td><td>ignored</td></tr>
+<tr><td>INC_DST</td><td>used</td><td>ignored</td><td>used</td></tr>
+<tr><td>GEN_SOP / GEN_EOP</td><td>ignored</td><td>frame the stream packet</td><td>ignored</td></tr>
+</tbody></table>
+<h2 id="register-map-summary"><span class="num">3</span>Register map summary</h2>
+<p>The full definition (access rules, side effects, strobes, responses) is in SPEC-04.</p>
+<table>
+<caption>Table 1-6: CSR map (AXI4-Lite, 8-bit offset)</caption>
+<thead><tr><th>Offset</th><th>Name</th><th>Access</th><th>Reset</th><th>Summary</th></tr></thead><tbody>
+<tr><td>0x00</td><td>CONTROL</td><td>RW / WO bits</td><td>0x0000_0000</td><td>bit0 RUN, bit1 STOP (pulse), bit2 SW_RESET (pulse)</td></tr>
+<tr><td>0x04</td><td>STATUS</td><td>RO</td><td>0x0000_0000</td><td>bit0 BUSY, bit1 DONE (sticky), bit2 ERROR (sticky)</td></tr>
+<tr><td>0x08</td><td>NEXT_DESC</td><td>RW</td><td>0x0000_0000</td><td>address of the first descriptor, [4:0] read as 0</td></tr>
+<tr><td>0x0C</td><td>MODE</td><td>RW</td><td>0x0000_0000</td><td>[1:0] 0 = M2M, 1 = M2S, 2 = S2M</td></tr>
+<tr><td>0x10</td><td>IRQ_ENABLE</td><td>RW</td><td>0x0000_0000</td><td>bit0 DONE interrupt enable, bit1 ERROR interrupt enable</td></tr>
+<tr><td>0x14</td><td>IRQ_STATUS</td><td>RW1C</td><td>0x0000_0000</td><td>bit0 DONE pending, bit1 ERROR pending; write 1 to clear</td></tr>
+<tr><td>0x18</td><td>VERSION</td><td>RO</td><td>0x0001_0000</td><td>IP version 1.0</td></tr>
+<tr><td>0x1C</td><td>SCRATCH</td><td>RW</td><td>0x0000_0000</td><td>32-bit scratch register, no side effect</td></tr>
+</tbody></table>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

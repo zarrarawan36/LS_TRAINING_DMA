@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J3 sgdma_mm_rd - testbench connections</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../j3_mm_rd/README.html">README</a> <a href="../j3_mm_rd/tb_connections.html">TB connections</a> <a href="../j3_mm_rd/testplan.html">Test plan</a> <a href="../j3_mm_rd/coverage_report.html">Coverage report</a> <a href="../j3_mm_rd/bug_report.html">Bug reports</a> <a href="../specs/06_sgdma_mm_rd.html">sgdma_mm_rd spec</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#testbench-top-overview">1  Testbench top overview</a></li><li class="l2"><a href="#port-connection-table">2  Port connection table</a></li><li class="l2"><a href="#editing-tb-top-step-by-step">3  Editing tb_top, step by step</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">J3-TBCON</div>
+<h1>J3 sgdma_mm_rd - testbench connections</h1>
+<p class="subtitle">Full tb_top picture, port-to-interface table, config_db names</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> J3-TBCON</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td><td><b>IP:</b> J3 sgdma_mm_rd</td></tr></table>
+</div>
+<div class="whatbox"><p>This page shows the complete testbench top (<code>tb_top</code>) of your block: which parts are
+<span class="tag provided">provided, already wired</span> and which parts are <span class="tag yours">to be created + connected</span>
+by you. Use the table to write your interfaces: it lists every DUT port you connect, the suggested interface signal, who
+drives it, and the suggested <code>config_db</code> name.</p></div>
+<h2 id="testbench-top-overview"><span class="num">1</span>Testbench top overview</h2>
+<figure><pre class="mermaid">
+flowchart LR
+  subgraph TB["tb_top"]
+    direction LR
+    CR["sgdma_clk_rst u_clk_rst&lt;br/&gt;+ rst_if rst_if_i&lt;br/&gt;config_db: rst_vif"]:::model
+    PIF0["axi4_if axi_if_i&lt;br/&gt;config_db: axi_vif"]:::uvm
+    MEM["sgdma_axi_mem u_mem&lt;br/&gt;+ axi_mem_bd_if mem_if_i&lt;br/&gt;config_db: mem_vif"]:::model
+    DUT["sgdma_mm_rd u_dut"]:::dut
+    G_cmd["sgdma_cmd_if cmd_if_i&lt;br/&gt;config_db: cmd_vif"]:::yours
+    G_dout["sgdma_data_if dout_if_i&lt;br/&gt;config_db: dout_vif"]:::yours
+    G_sts["sgdma_sts_if sts_if_i&lt;br/&gt;config_db: sts_vif"]:::yours
+  end
+  subgraph ENV["your UVM env"]
+    direction TB
+    PA0["axi4_agent (passive monitor)"]:::uvm
+    A_cmd["your cmd agent"]:::yours
+    A_dout["your dout agent"]:::yours
+    A_sts["your sts agent"]:::yours
+    SCB["scoreboard + ref model&lt;br/&gt;coverage"]:::yours
+  end
+  CR --&gt;|"clk, rst_n"| DUT
+  PIF0 &lt;--&gt;|"m_axi_* (provided, already wired)"| DUT
+  PA0 --&gt;|"vif"| PIF0
+  PIF0 &lt;--&gt;|"AXI4 slave (provided, already wired)"| MEM
+  G_cmd &lt;-.-&gt;|"cmd, cmd_valid, cmd_ready (to be created + connected)"| DUT
+  A_cmd -.-&gt;|"vif"| G_cmd
+  G_dout &lt;-.-&gt;|"dout_data ... dout_ready (to be created + connected)"| DUT
+  A_dout -.-&gt;|"vif"| G_dout
+  G_sts &lt;-.-&gt;|"sts, sts_valid, sts_ready (to be created + connected)"| DUT
+  A_sts -.-&gt;|"vif"| G_sts
+  classDef dut fill:#ffd8a8,stroke:#d9480f,stroke-width:3px,color:#1a1a1a,font-weight:bold;
+  classDef model fill:#dbe4f0,stroke:#4a5d78,stroke-width:1.5px,color:#1a1a1a;
+  classDef uvm fill:#d3f0d8,stroke:#2b8a3e,stroke-width:1.5px,color:#1a1a1a;
+  classDef yours fill:#fff6bf,stroke:#b08900,stroke-width:1.5px,stroke-dasharray:6 4,color:#1a1a1a;
+  classDef ext fill:#ffffff,stroke:#868e96,stroke-width:1px,color:#495057;
+  classDef fsm fill:#e5dbff,stroke:#5f3dc4,stroke-width:2px,color:#1a1a1a;
+  classDef reg fill:#d0ebff,stroke:#1864ab,stroke-width:1.5px,color:#1a1a1a;
+  classDef comb fill:#ffffff,stroke:#495057,stroke-width:1px,color:#1a1a1a;
+  classDef port fill:#f1f3f5,stroke:#868e96,stroke-width:1px,color:#495057;
+</pre><div class="clegend"><b>Legend</b><span class="lg"><i class="sw sw-dut"></i>DUT / IP under verification</span><span class="lg"><i class="sw sw-model"></i>provided model (sgdma_clk_rst, sgdma_axi_mem, data FIFO)</span><span class="lg"><i class="sw sw-uvm"></i>provided UVM agent / interface (dv_lib)</span><span class="lg"><i class="sw sw-yours"></i>created by you (interface / agent / component), dashed border</span><span class="lg lg-note">solid arrows = provided, already wired &nbsp;|&nbsp; dotted arrows = to be created + connected</span></div><figcaption>Figure 1: tb_top of sgdma_mm_rd</figcaption></figure>
+<h2 id="port-connection-table"><span class="num">2</span>Port connection table</h2>
+<p>Direction is seen from the DUT: <span class='tag in'>in</span> = DUT input, your driver drives it (0 during reset); <span class='tag out'>out</span> = DUT output, your monitor samples it. All signals are synchronous to the rising edge of <code>clk</code>; reset is <code>rst_n</code> (active low, asynchronous).</p>
+<table class="compact">
+<caption>Table 1: DUT port to interface mapping</caption>
+<thead><tr><th>DUT port</th><th>Dir</th><th>Type</th><th>Suggested interface signal</th><th>Driven by</th><th>Clock / reset</th><th>config_db name</th></tr></thead><tbody>
+<tr class="group"><td colspan="7"><span class="tag yours">to be created + connected</span> group <b>cmd</b>: command channel (you send commands) - suggested interface <code>sgdma_cmd_if</code>, instance <code>cmd_if_i</code>, config_db name <code>"cmd_vif"</code>; protocol: valid/ready, SPEC-00 'Command channel'</td></tr>
+<tr><td><code>cmd</code></td><td><span class="tag in">in</span></td><td><code>sgdma_cmd_t</code></td><td><code>cmd_if_i.cmd</code></td><td>your driver</td><td>clk / drive 0 while rst_n = 0</td><td><code>"cmd_vif"</code></td></tr>
+<tr><td><code>cmd_valid</code></td><td><span class="tag in">in</span></td><td><code>logic</code></td><td><code>cmd_if_i.valid</code></td><td>your driver</td><td>clk / drive 0 while rst_n = 0</td><td><code>"cmd_vif"</code></td></tr>
+<tr><td><code>cmd_ready</code></td><td><span class="tag out">out</span></td><td><code>logic</code></td><td><code>cmd_if_i.ready</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"cmd_vif"</code></td></tr>
+<tr class="group"><td colspan="7"><span class="tag yours">to be created + connected</span> group <b>dout</b>: dout data-beat channel (DUT sends beats, you drive ready) - suggested interface <code>sgdma_data_if</code>, instance <code>dout_if_i</code>, config_db name <code>"dout_vif"</code>; protocol: valid/ready, SPEC-00 'Data-beat channel'</td></tr>
+<tr><td><code>dout_data</code></td><td><span class="tag out">out</span></td><td><code>logic [31:0]</code></td><td><code>dout_if_i.data</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"dout_vif"</code></td></tr>
+<tr><td><code>dout_keep</code></td><td><span class="tag out">out</span></td><td><code>logic [3:0]</code></td><td><code>dout_if_i.keep</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"dout_vif"</code></td></tr>
+<tr><td><code>dout_last</code></td><td><span class="tag out">out</span></td><td><code>logic</code></td><td><code>dout_if_i.last</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"dout_vif"</code></td></tr>
+<tr><td><code>dout_valid</code></td><td><span class="tag out">out</span></td><td><code>logic</code></td><td><code>dout_if_i.valid</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"dout_vif"</code></td></tr>
+<tr><td><code>dout_ready</code></td><td><span class="tag in">in</span></td><td><code>logic</code></td><td><code>dout_if_i.ready</code></td><td>your driver</td><td>clk / drive 0 while rst_n = 0</td><td><code>"dout_vif"</code></td></tr>
+<tr class="group"><td colspan="7"><span class="tag yours">to be created + connected</span> group <b>sts</b>: status channel (DUT sends, you drive ready) - suggested interface <code>sgdma_sts_if</code>, instance <code>sts_if_i</code>, config_db name <code>"sts_vif"</code>; protocol: valid/ready, SPEC-00 'Status channel'</td></tr>
+<tr><td><code>sts</code></td><td><span class="tag out">out</span></td><td><code>sgdma_sts_t</code></td><td><code>sts_if_i.sts</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"sts_vif"</code></td></tr>
+<tr><td><code>sts_valid</code></td><td><span class="tag out">out</span></td><td><code>logic</code></td><td><code>sts_if_i.valid</code></td><td>DUT (your monitor samples)</td><td>clk / reset value 0</td><td><code>"sts_vif"</code></td></tr>
+<tr><td><code>sts_ready</code></td><td><span class="tag in">in</span></td><td><code>logic</code></td><td><code>sts_if_i.ready</code></td><td>your driver</td><td>clk / drive 0 while rst_n = 0</td><td><code>"sts_vif"</code></td></tr>
+<tr class="group"><td colspan="7"><span class="tag provided">provided, already wired</span> AXI4 read master port m_axi_ar* / r* to sgdma_axi_mem (write channels tied off) &rarr; <code>axi4_if axi_if_i</code>, config_db name <code>"axi_vif"</code>, used by axi4_agent (passive monitor)</td></tr>
+<tr><td><code>m_axi_araddr, m_axi_arlen, m_axi_arsize, ...</code> (11 signals)</td><td>in/out</td><td>see SPEC-11</td><td><code>axi_if_i.&lt;signal&gt;</code></td><td>provided agent / DUT</td><td>clk / rst_n</td><td><code>"axi_vif"</code></td></tr>
+<tr class="group"><td colspan="7"><span class="tag provided">provided, already wired</span> clock, reset, helpers</td></tr>
+<tr><td><code>clk</code>, <code>rst_n</code></td><td>in</td><td>logic</td><td>from <code>u_clk_rst</code></td><td>sgdma_clk_rst</td><td>-</td><td><code>"rst_vif"</code> (rst_if)</td></tr>
+<tr><td>memory backdoor</td><td>-</td><td>-</td><td><code>mem_if_i</code> (axi_mem_bd_if)</td><td>your env / test</td><td>-</td><td><code>"mem_vif"</code></td></tr>
+</tbody></table>
+<h2 id="editing-tb-top-step-by-step"><span class="num">3</span>Editing tb_top, step by step</h2>
+<p>Example for the first group; repeat for every group.</p>
+<pre class="code"><code>// tb_uvm/sgdma_cmd_if.sv  (add it to sim/my_tb.f before your packages)
+interface sgdma_cmd_if (input logic clk, input logic rst_n);
+  import sgdma_pkg::*;
+  sgdma_cmd_t    cmd;
+  logic          valid;
+  logic          ready;
+  // clocking blocks for your driver(s) and monitor, optional assertions (see SPEC-00)
+endinterface</code></pre>
+<pre class="code"><code>// [1/3] declare your interface instance
+sgdma_cmd_if cmd_if_i (.clk(clk), .rst_n(rst_n));
+
+// [2/3] in the DUT instance replace the placeholders, e.g.
+//   .cmd           (ph_cmd),   becomes
+    .cmd           (cmd_if_i.cmd),
+    .cmd_valid     (cmd_if_i.valid),
+    .cmd_ready     (cmd_if_i.ready),
+//   ... then delete the ph_* declarations of this group
+
+// [3/3] before run_test()
+uvm_config_db#(virtual sgdma_cmd_if)::set(null, "*", "cmd_vif", cmd_if_i);</code></pre>
+<pre class="code"><code>// in your agent / env build_phase
+virtual sgdma_cmd_if vif;
+if (!uvm_config_db#(virtual sgdma_cmd_if)::get(this, "", "cmd_vif", vif))
+  `uvm_fatal("CFG", "cmd_vif not found in config_db - check tb_top step [3/3]")</code></pre>
+<div class="note">The cmd, data and status interfaces have the same shape in several blocks. Write them generically (signal names <code>data/keep/last/valid/ready</code>, <code>cmd/valid/ready</code>, <code>sts/valid/ready</code>) with clocking blocks for both sender and receiver roles.</div>
+<p>After each step: <code>cd sim &amp;&amp; make run</code> &rarr; <code>RESULT: j3_harness_smoke_test seed=1 PASSED</code>. A <code>HINT:</code> line about config_db means a name in tb_top and in your <code>get</code> call differ.</p>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

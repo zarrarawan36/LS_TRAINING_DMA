@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Guide - Files, Make Targets, config_db Names</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-the-harness-is">1  What the harness is</a></li><li class="l2"><a href="#directory-layout-of-your-work-area">2  Directory layout of your work area</a></li><li class="l2"><a href="#running-simulations">3  Running simulations</a></li><li class="l2"><a href="#file-lists">4  File lists</a></li><li class="l2"><a href="#tb-top-what-is-wired-and-what-you-add">5  tb_top: what is wired and what you add</a></li><li class="l2"><a href="#watchdog-and-waveforms">6  Watchdog and waveforms</a></li><li class="l2"><a href="#pre-created-testbench-files">7  Pre-created testbench files</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-12</div>
+<h1>Harness Guide - Files, Make Targets, config_db Names</h1>
+<p class="subtitle">How to build and run, file lists, tb_top TODO markers, config_db names</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-12</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-the-harness-is"><span class="num">1</span>What the harness is</h2>
+<div class="whatbox"><p>The <b>harness</b> is everything needed to compile and run a simulation of your block on day 1:
+the testbench top <code>tb_top.sv</code>, a smoke test, the Makefile and the file lists. It runs out of the box. Your work
+plugs into it at clearly marked places.</p></div>
+<h2 id="directory-layout-of-your-work-area"><span class="num">2</span>Directory layout of your work area</h2>
+<pre class="code"><code>&lt;ip&gt;/                      e.g. j3_mm_rd/
+  docs/                    this documentation set (open your README first)
+  rtl/                     DUT RTL, sgdma_pkg, sgdma_clk_rst, sgdma_axi_mem          read-only
+  dv_lib/                  provided interfaces + agents (SPEC-11)                     read-only
+  harness/                 tb_top.sv (PARTIALLY WIRED - you complete it),
+                           jN_harness_pkg.sv (smoke test), common include files
+  tb_uvm/                  YOUR testbench: interfaces, agents, env, scoreboard, coverage
+                           (pre-created files with TODO markers to fill in)
+  tests/                   YOUR tests: jN_test_pkg.sv, jN_base_test, jN_first_test, ...
+  sim/                     Makefile, rtl.f, dv_lib.f, harness.f      provided, do not edit
+                           my_tb.f, regress.list                     yours</code></pre>
+<div class="note">If a folder in your copy is named differently, the file lists in <code>sim/*.f</code> are the reference: they say exactly which files are compiled.</div>
+<h2 id="running-simulations"><span class="num">3</span>Running simulations</h2>
+<p>Run every command from the <code>sim/</code> directory.</p>
+<table>
+<caption>Table 12-1: Make targets and variables</caption>
+<thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>make run</code></td><td>builds if needed, runs the smoke test with seed 1</td></tr>
+<tr><td><code>make run TEST=&lt;name&gt; SEED=&lt;n&gt;</code></td><td>runs any test with any seed</td></tr>
+<tr><td><code>make run TEST=&lt;name&gt; VERBOSITY=UVM_HIGH</code></td><td>more messages (UVM_LOW, UVM_MEDIUM default, UVM_HIGH, UVM_DEBUG)</td></tr>
+<tr><td><code>make run TEST=&lt;name&gt; WAVES=1</code></td><td>also writes <code>waves.vcd</code> (open with GTKWave or your simulator's viewer)</td></tr>
+<tr><td><code>make run TEST=&lt;name&gt; PLUSARGS="+TB_TIMEOUT_NS=5000000"</code></td><td>extra plusargs; this one raises the global watchdog (default 2 ms)</td></tr>
+<tr><td><code>make regress</code></td><td>runs every <code>&lt;test&gt; &lt;seed&gt;</code> line of <code>regress.list</code>, prints PASS/FAIL per line and a summary</td></tr>
+<tr><td><code>make clean</code></td><td>deletes <code>build/</code> and <code>logs/</code></td></tr>
+<tr><td><code>make help</code></td><td>prints the usage text</td></tr>
+<tr><td><code>SIM=verilator | vcs | questa | xcelium</code></td><td>simulator (default verilator; set <code>UVM_HOME</code> for Verilator)</td></tr>
+</tbody></table>
+<pre class="code shell"><code>cd sim
+make run                                    # smoke test
+make run TEST=j3_first_test SEED=7          # one of your tests
+make run TEST=j3_rand_test SEED=42 WAVES=1  # with waveform
+make regress                                # all lines of regress.list</code></pre>
+<p>Each run writes <code>logs/&lt;test&gt;_seed&lt;n&gt;.log</code> and ends with a line <code>RESULT: &lt;test&gt; seed=&lt;n&gt; PASSED</code> (no UVM_ERROR, no UVM_FATAL) or <code>FAILED</code>. If a config_db name or test name is wrong the Makefile prints a <code>HINT:</code> line.</p>
+<h2 id="file-lists"><span class="num">4</span>File lists</h2>
+<table>
+<caption>Table 12-2: Compilation inputs</caption>
+<thead><tr><th>File</th><th>Owner</th><th>Content</th></tr></thead><tbody>
+<tr><td><code>sim/rtl.f</code></td><td>provided</td><td>DUT and models</td></tr>
+<tr><td><code>sim/dv_lib.f</code></td><td>provided</td><td>provided interfaces and agent packages</td></tr>
+<tr><td><code>sim/my_tb.f</code></td><td><b>you</b></td><td>your files in compile order: 1. your interfaces, 2. your env package, 3. your test package; plus <code>+incdir+</code> lines for included <code>.svh</code> files</td></tr>
+<tr><td><code>sim/harness.f</code></td><td>provided</td><td>tb_top, harness package (compiled last)</td></tr>
+<tr><td><code>sim/regress.list</code></td><td><b>you</b></td><td>one run per line: <code>&lt;test name&gt; &lt;seed&gt;</code>; <code>#</code> starts a comment</td></tr>
+</tbody></table>
+<p>The Makefile variable <code>TEST_PKG</code> (default <code>jN_test_pkg</code>) names the package tb_top imports so that <code>+UVM_TESTNAME</code> can find your tests.</p>
+<h2 id="tb-top-what-is-wired-and-what-you-add"><span class="num">5</span>tb_top: what is wired and what you add</h2>
+<p><code>tb_top.sv</code> already contains: the clock/reset generator and <code>rst_if</code>, the provided bus
+interface(s) connected to the DUT, the memory model <code>u_mem</code> and its backdoor interface (J2-J4), the
+<code>config_db::set</code> calls for all provided interfaces, and <code>run_test()</code>.</p>
+<p>The DUT's simple ports are connected to <b>placeholder signals</b> named <code>ph_&lt;port&gt;</code> (inputs tied to 0, outputs
+left unused) so that everything compiles. Three numbered TODO markers show where you work:</p>
+<ol>
+<li><b>[1/3]</b> declare your interface instances,</li>
+<li><b>[2/3]</b> in the DUT instance, replace every <code>ph_&lt;port&gt;</code> by <code>&lt;your_if_instance&gt;.&lt;signal&gt;</code>, then delete the placeholder declarations,</li>
+<li><b>[3/3]</b> publish your virtual interfaces with <code>uvm_config_db#(virtual ...)::set(null, "*", "&lt;name&gt;_vif", ...)</code> before <code>run_test()</code>.</li>
+</ol>
+<p>Rerun the smoke test after each step: it only uses the provided interfaces, so it must keep passing.</p>
+<table>
+<caption>Table 12-3: Smoke tests and config_db names per IP</caption>
+<thead><tr><th>IP</th><th>Smoke test</th><th>Provided config_db names</th><th>Suggested names for your interfaces</th></tr></thead><tbody>
+<tr><td>J1 sgdma_csr</td><td><code>j1_harness_smoke_test</code></td><td>rst_vif, axil_vif</td><td>hw_vif</td></tr>
+<tr><td>J2 sgdma_desc</td><td><code>j2_harness_smoke_test</code></td><td>rst_vif, axi_vif, mem_vif</td><td>ctrl_vif, src_vif, dst_vif</td></tr>
+<tr><td>J3 sgdma_mm_rd</td><td><code>j3_harness_smoke_test</code></td><td>rst_vif, axi_vif, mem_vif</td><td>cmd_vif, dout_vif, sts_vif</td></tr>
+<tr><td>J4 sgdma_mm_wr</td><td><code>j4_harness_smoke_test</code></td><td>rst_vif, axi_vif, mem_vif</td><td>cmd_vif, din_vif, sts_vif</td></tr>
+<tr><td>J5 sgdma_axis_src</td><td><code>j5_harness_smoke_test</code></td><td>rst_vif, axis_vif</td><td>cmd_vif, din_vif, sts_vif</td></tr>
+<tr><td>J6 sgdma_axis_snk</td><td><code>j6_harness_smoke_test</code></td><td>rst_vif, axis_vif</td><td>cmd_vif, dout_vif, sts_vif</td></tr>
+</tbody></table>
+<h2 id="watchdog-and-waveforms"><span class="num">6</span>Watchdog and waveforms</h2>
+<p>tb_top contains a global watchdog: if the simulation runs longer than <code>+TB_TIMEOUT_NS</code> (default 2 000 000 ns) it stops with a <code>UVM_FATAL</code>. This usually means a sequence or driver waits for something that never happens. <code>WAVES=1</code> dumps all signals of tb_top to <code>waves.vcd</code>.</p>
+<h2 id="pre-created-testbench-files"><span class="num">7</span>Pre-created testbench files</h2>
+<p><code>tb_uvm/</code> and <code>tests/</code> contain files that compile as delivered and show the intended structure (item, driver, monitor, agent per port group; env, scoreboard, reference model, coverage; base test, first test). They contain TODO markers and no checking logic: filling them in is your assignment. <code>jN_base_test</code> builds the env, prints the topology, waits for reset, calls <code>body()</code> and prints <code>*** TEST PASSED ***</code> or <code>*** TEST FAILED ***</code> in its report phase. Your tests extend it and override <code>body()</code>.</p>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

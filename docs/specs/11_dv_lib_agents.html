@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verification Library (dv_lib) - Provided Interfaces and Agents</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-is-provided">1  What is provided</a></li><li class="l2"><a href="#axi4lite-agent-j1">2  axi4lite_agent (J1)</a></li><li class="l2"><a href="#axi4-agent-j2-j3-j4-passive">3  axi4_agent (J2, J3, J4) - passive</a></li><li class="l2"><a href="#axis-agent-j5-j6">4  axis_agent (J5, J6)</a></li><li class="l2"><a href="#axi-mem-bd-if-and-rst-if">5  axi_mem_bd_if and rst_if</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-11</div>
+<h1>Verification Library (dv_lib) - Provided Interfaces and Agents</h1>
+<p class="subtitle">Provided interfaces, agents, items, sequences and knobs</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-11</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-is-provided"><span class="num">1</span>What is provided</h2>
+<div class="whatbox"><p>The <code>dv_lib/</code> folder contains <b>interfaces and UVM agents for the standard buses</b>
+(AXI4-Lite, AXI4, AXI-Stream), the reset helper and the memory backdoor. They are finished and tested: use them, do not edit
+them. Each agent comes with one example sequence or usage snippet in the header of its package file.</p>
+<p>For the <b>simple ports</b> of your DUT (command, status, data-beat channels and control wires) there is no agent: you
+write those interfaces and agents yourself, following SPEC-00 and your block spec.</p></div>
+<table>
+<caption>Table 11-1: Provided verification components</caption>
+<thead><tr><th>Item</th><th>File(s)</th><th>Used by</th><th>config_db name (set in tb_top)</th></tr></thead><tbody>
+<tr><td>rst_if</td><td>dv_lib/interfaces/rst_if.sv</td><td>all</td><td><code>"rst_vif"</code></td></tr>
+<tr><td>axi4lite_if + axi4lite_agent</td><td>dv_lib/interfaces/axi4lite_if.sv, dv_lib/axi4lite_agent/</td><td>J1</td><td><code>"axil_vif"</code></td></tr>
+<tr><td>axi4_if + axi4_agent (passive)</td><td>dv_lib/interfaces/axi4_if.sv, dv_lib/axi4_agent/</td><td>J2, J3, J4</td><td><code>"axi_vif"</code></td></tr>
+<tr><td>axi_mem_bd_if (memory backdoor)</td><td>dv_lib/interfaces/axi_mem_bd_if.sv</td><td>J2, J3, J4</td><td><code>"mem_vif"</code></td></tr>
+<tr><td>axis_if + axis_agent</td><td>dv_lib/interfaces/axis_if.sv, dv_lib/axis_agent/</td><td>J5 (slave role), J6 (master role)</td><td><code>"axis_vif"</code></td></tr>
+</tbody></table>
+<figure><pre class="mermaid">
+flowchart TB
+  subgraph AG["provided agent (example: axi4lite_agent, active)"]
+    SQR["sequencer"] --&gt; DRV["driver"]
+    MON["monitor"]
+  end
+  CFG["cfg object&lt;br/&gt;(vif, knobs)"] -. "config_db 'cfg'" .-&gt; AG
+  DRV -- "drives pins" --&gt; VIF["virtual interface"]
+  VIF -- "samples pins" --&gt; MON
+  MON -- "ap.write(item)" --&gt; SCB["your scoreboard / coverage"]
+</pre><figcaption>Figure 11-1: How a provided agent is used</figcaption></figure>
+<h2 id="axi4lite-agent-j1"><span class="num">2</span>axi4lite_agent (J1)</h2>
+<p>Package <code>axi4lite_agent_pkg</code>. Active master: sequencer + driver + monitor (passive: monitor only).</p>
+<table>
+<caption>Table 11-2: axi4lite_agent API</caption>
+<thead><tr><th>Class / member</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>axi4lite_cfg</code></td><td><code>vif</code>, <code>is_active</code> (UVM_ACTIVE default), <code>trace</code> (print every transaction)</td></tr>
+<tr><td><code>axi4lite_item</code></td><td><code>rw</code> (AXIL_READ / AXIL_WRITE), <code>addr</code>, <code>data</code>, <code>strb</code>, <code>prot</code>, <code>order</code>, <code>aw_w_gap</code>, <code>resp_ready_delay</code>; filled by driver / monitor: <code>resp</code>, <code>start_time</code>, <code>end_time</code></td></tr>
+<tr><td><code>axil_order_e</code></td><td>AXIL_ORDER_SIMULT, AXIL_ORDER_AW_FIRST, AXIL_ORDER_W_FIRST, AXIL_ORDER_RANDOM (default): order in which the driver raises AWVALID and WVALID</td></tr>
+<tr><td><code>axi4lite_base_seq</code></td><td>extend it: <code>write_reg(addr, data, resp [, strb [, order]])</code>, <code>read_reg(addr, data, resp)</code></td></tr>
+<tr><td><code>agent.sqr</code> / <code>agent.ap</code></td><td>start sequences on <code>sqr</code>; <code>ap</code> sends every completed transaction</td></tr>
+<tr><td><code>AXIL_RESP_OKAY</code> / <code>AXIL_RESP_SLVERR</code></td><td>2'b00 / 2'b10</td></tr>
+</tbody></table>
+<pre class="code"><code>class my_reg_seq extends axi4lite_base_seq;
+  `uvm_object_utils(my_reg_seq)
+  function new(string name = "my_reg_seq"); super.new(name); endfunction
+  task body();
+    bit [31:0] rd; bit [1:0] resp;
+    write_reg(32'h1C, 32'h1234_5678, resp);                     // full write, random AW/W order
+    write_reg(32'h1C, 32'hAABB_CCDD, resp, 4'b0011);            // bytes 0 and 1 only
+    write_reg(32'h1C, 32'h0, resp, 4'hF, AXIL_ORDER_W_FIRST);   // data before address
+    read_reg (32'h1C, rd, resp);
+  endtask
+endclass</code></pre>
+<h2 id="axi4-agent-j2-j3-j4-passive"><span class="num">3</span>axi4_agent (J2, J3, J4) - passive</h2>
+<p>Package <code>axi4_agent_pkg</code>. Monitor only: the slave on this bus is the memory model, so nothing has to be driven. The agent reports what the DUT did.</p>
+<table>
+<caption>Table 11-3: axi4_agent API</caption>
+<thead><tr><th>Class / member</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>axi4_cfg</code></td><td><code>vif</code>, <code>trace</code></td></tr>
+<tr><td><code>agent.addr_ap</code></td><td><code>axi4_addr_item</code> on every AW / AR handshake: <code>rw, addr, len, size, burst, addr_time</code></td></tr>
+<tr><td><code>agent.ap</code></td><td><code>axi4_item</code> per complete burst (read: at RLAST; write: at B): <code>rw, addr, len, size, burst, data[$], strb[$], last[$], rresp[$], bresp, addr_time, end_time</code></td></tr>
+<tr><td>helpers</td><td><code>num_beats()</code>, <code>beat_addr(i)</code>, <code>end_addr()</code>, <code>crosses_4k()</code>, <code>any_error()</code></td></tr>
+</tbody></table>
+<pre class="code"><code>function void write_axi(axi4_item t);          // in your scoreboard (uvm_analysis_imp_decl(_axi))
+  foreach (t.data[i])
+    `uvm_info("SCB", $sformatf("beat %0d addr=0x%08h data=0x%08h strb=%04b", i, t.beat_addr(i), t.data[i], t.strb[i]), UVM_HIGH)
+  // compare against what your reference model expects for this burst ...
+endfunction</code></pre>
+<h2 id="axis-agent-j5-j6"><span class="num">4</span>axis_agent (J5, J6)</h2>
+<p>Package <code>axis_agent_pkg</code>. One class, three roles chosen by <code>cfg.role</code> before the agent is built.</p>
+<table>
+<caption>Table 11-4: axis_agent roles</caption>
+<thead><tr><th>Role</th><th>Contents</th><th>Use</th></tr></thead><tbody>
+<tr><td>AXIS_MASTER</td><td>sequencer + master driver + monitor</td><td>J6: your sequences send stream packets into the DUT</td></tr>
+<tr><td>AXIS_SLAVE</td><td>slave driver (TREADY) + monitor</td><td>J5: receives the DUT's stream, back-pressure via knobs</td></tr>
+<tr><td>AXIS_PASSIVE</td><td>monitor</td><td>observe only</td></tr>
+</tbody></table>
+<table>
+<caption>Table 11-5: axis_cfg knobs</caption>
+<thead><tr><th>cfg knob</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>valid_gap_pct</code>, <code>max_valid_gap</code></td><td>0, 3</td><td>master: probability / maximum of idle cycles before a beat</td></tr>
+<tr><td><code>ready_pct</code></td><td>100</td><td>slave: probability that TREADY = 1 in a cycle (0 = full back-pressure); may be changed at run time</td></tr>
+<tr><td><code>ready_before_valid</code></td><td>1</td><td>slave: TREADY may be 1 while TVALID = 0</td></tr>
+<tr><td><code>has_tuser</code></td><td>0</td><td>monitor reports TUSER (set 1 for J5)</td></tr>
+<tr><td><code>trace</code></td><td>0</td><td>print every packet</td></tr>
+</tbody></table>
+<table>
+<caption>Table 11-6: axis_agent API</caption>
+<thead><tr><th>Member</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>axis_item</code></td><td><code>data[$], keep[$], last[$], user[$], gap[$]</code>; helpers <code>from_bytes()</code>, <code>to_bytes()</code>, <code>num_beats()</code>, <code>num_bytes()</code>, <code>add_beat()</code>. An item may end without TLAST or carry TLAST in the middle.</td></tr>
+<tr><td><code>axis_base_seq</code></td><td><code>send_bytes(bytes, set_last = 1, set_user = 0)</code>, <code>send_item(item)</code></td></tr>
+<tr><td><code>axis_random_pkt_seq</code></td><td><code>n_pkts</code> packets of random length in <code>[min_bytes, max_bytes]</code></td></tr>
+<tr><td><code>agent.pkt_ap</code> / <code>agent.beat_ap</code></td><td>packets (up to TLAST) / single beats</td></tr>
+<tr><td><code>mon.pending_beats()</code>, <code>mon.take_pending()</code></td><td>beats seen since the last TLAST (for streams that do not end with TLAST)</td></tr>
+</tbody></table>
+<pre class="code"><code>// J5 env: slave on the DUT's m_axis
+axis_cfg_h = axis_cfg::type_id::create("axis_cfg_h");
+axis_cfg_h.role      = AXIS_SLAVE;
+axis_cfg_h.has_tuser = 1;
+axis_cfg_h.ready_pct = 70;
+if (!uvm_config_db#(virtual axis_if)::get(this, "", "axis_vif", axis_cfg_h.vif)) `uvm_fatal("ENV", "axis_vif not found")
+uvm_config_db#(axis_cfg)::set(this, "axis_agt", "cfg", axis_cfg_h);
+axis_agt = axis_agent::type_id::create("axis_agt", this);</code></pre>
+<h2 id="axi-mem-bd-if-and-rst-if"><span class="num">5</span>axi_mem_bd_if and rst_if</h2>
+<p>See <a href="../specs/03_mem_model.html">SPEC-03 Backdoor API</a> and <a href="../specs/02_clk_rst.html">SPEC-02 rst_if</a>.</p>
+<div class="caution">The provided monitors do not check protocol rules. They report what happened; deciding whether it was correct is the job of your scoreboard, checks and assertions.</div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# regress.list : one run per line  "<test name> <seed>"   ('#' = comment)
+# make regress   runs them all and prints a PASS/FAIL summary
+j3_harness_smoke_test 1
+j3_base_test 1
+j3_first_test 1

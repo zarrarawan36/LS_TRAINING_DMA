@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock and Reset Generator (sgdma_clk_rst)</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/skins/default.js"></script>
+<script src="../assets/js/wavedrom.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-this-block-does">1  What this block does</a></li><li class="l3"><a href="#example-walkthrough">1.1  Example walkthrough</a></li><li class="l2"><a href="#parameters-and-ports">2  Parameters and ports</a></li><li class="l2"><a href="#behaviour">3  Behaviour</a></li><li class="l2"><a href="#the-provided-rst-if">4  The provided rst_if</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-02</div>
+<h1>Clock and Reset Generator (sgdma_clk_rst)</h1>
+<p class="subtitle">Testbench clock and reset generator, rst_if helper</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-02</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-this-block-does"><span class="num">1</span>What this block does</h2>
+<div class="whatbox"><p><code>sgdma_clk_rst</code> is a simulation-only model that makes the testbench clock and the active-low reset. Every testbench top instantiates it once; all DUT and testbench logic runs on its <code>clk</code>. A testbench can request a reset at any time through the <code>rst_req</code> input (the provided <code>rst_if</code> interface does this for you).</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  RI["rst_if.rst_req&lt;br/&gt;(testbench)"] -- rst_req --&gt; CR["sgdma_clk_rst&lt;br/&gt;CLK_PERIOD_NS, RESET_CYCLES"]
+  CR -- clk --&gt; DUT["DUT + testbench"]
+  CR -- rst_n --&gt; DUT
+</pre><figcaption>Figure 2-1: sgdma_clk_rst top-level I/O</figcaption></figure>
+<h3 id="example-walkthrough"><span class="num">1.1</span>Example walkthrough</h3>
+<p>With the default parameters (10 ns, 5 cycles): <code>clk</code> starts at 0 and rises at 5, 15, 25, 35, 45 ns ... <code>rst_n</code> is 0 from time 0 and becomes 1 right after the 5th rising edge (45 ns). Later the test calls <code>rst_vif.apply_reset(2)</code>: <code>rst_req</code> goes high, <code>rst_n</code> drops immediately, and <code>rst_n</code> returns to 1 on the 5th rising edge after <code>rst_req</code> went low again.</p>
+<h2 id="parameters-and-ports"><span class="num">2</span>Parameters and ports</h2>
+<table>
+<caption>Table 2-1: Parameters</caption>
+<thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>CLK_PERIOD_NS</code></td><td>10.0</td><td>clock period in ns (real)</td></tr>
+<tr><td><code>RESET_CYCLES</code></td><td>5</td><td>number of rising clock edges rst_n stays low after time 0 or after rst_req falls</td></tr>
+</tbody></table>
+<table>
+<caption>Table 2-2: Ports</caption>
+<thead><tr><th>Port</th><th>Dir</th><th>Width</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>rst_req</code></td><td>in</td><td>1</td><td>asynchronous reset request from the testbench (active high)</td></tr>
+<tr><td><code>clk</code></td><td>out</td><td>1</td><td>free-running clock, 50 % duty cycle</td></tr>
+<tr><td><code>rst_n</code></td><td>out</td><td>1</td><td>active-low reset for the DUT and the testbench</td></tr>
+</tbody></table>
+<h2 id="behaviour"><span class="num">3</span>Behaviour</h2>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="CLK-GEN-001"><td><span class="sid">CLK-GEN-001</span></td><td><code>clk</code> starts at 0 at time 0 and toggles every <code>CLK_PERIOD_NS/2</code>.</td></tr>
+<tr id="CLK-RST-001"><td><span class="sid">CLK-RST-001</span></td><td><code>rst_n</code> is 0 from time 0.</td></tr>
+<tr id="CLK-RST-002"><td><span class="sid">CLK-RST-002</span></td><td><code>rst_n</code> is released (set to 1) synchronously to a rising edge of <code>clk</code>: on the <code>RESET_CYCLES</code>-th rising edge after time 0.</td></tr>
+<tr id="CLK-RST-003"><td><span class="sid">CLK-RST-003</span></td><td>A rising <code>rst_req</code> sets <code>rst_n = 0</code> immediately (asynchronously).</td></tr>
+<tr id="CLK-RST-004"><td><span class="sid">CLK-RST-004</span></td><td>After <code>rst_req</code> returns to 0, <code>rst_n</code> is released on the <code>RESET_CYCLES</code>-th rising edge.</td></tr>
+</tbody></table>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',     wave: 'p..........' },
+  { name: 'rst_req', wave: '0......1.0.' },
+  { name: 'rst_n',   wave: '0....1.0...' , node: '.....a.b' },
+  { name: 'cycle',   wave: '=========..', data: ['1','2','3','4','5','','','',''] }
+ ],
+ head: { text: 'RESET_CYCLES = 5: release at the 5th rising edge; rst_req asserts reset at once' } }
+</script></div><figcaption>Figure 2-2: Reset release and reset request</figcaption></figure>
+<h2 id="the-provided-rst-if"><span class="num">4</span>The provided rst_if</h2>
+<table>
+<caption>Table 2-3: rst_if (config_db name "rst_vif")</caption>
+<thead><tr><th>Member</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>logic rst_req</code></td><td>connected to <code>sgdma_clk_rst.rst_req</code> in tb_top</td></tr>
+<tr><td><code>task wait_reset_released()</code></td><td>blocks until <code>rst_n = 1</code>, then waits one more clock edge</td></tr>
+<tr><td><code>task apply_reset(int unsigned cycles = 2)</code></td><td>holds <code>rst_req</code> for <i>cycles</i> clocks, then waits until reset is released again</td></tr>
+</tbody></table>
+<div class="note">All DUT flip-flops use an asynchronous active-low reset. While <code>rst_n = 0</code> every DUT output has its reset value (all valid outputs 0). Your drivers must drive their valid signals to 0 while <code>rst_n = 0</code> (IF-RST-001), and your monitors must discard half-finished transactions when reset is asserted.</div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

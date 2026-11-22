@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J3 sgdma_mm_rd - README</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body data-home="self">
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../j3_mm_rd/README.html">README</a> <a href="../j3_mm_rd/tb_connections.html">TB connections</a> <a href="../j3_mm_rd/testplan.html">Test plan</a> <a href="../j3_mm_rd/coverage_report.html">Coverage report</a> <a href="../j3_mm_rd/bug_report.html">Bug reports</a> <a href="../specs/06_sgdma_mm_rd.html">sgdma_mm_rd spec</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#testbench-overview">1  Testbench overview</a></li><li class="l2"><a href="#getting-started-step-by-step">2  Getting started, step by step</a></li><li class="l2"><a href="#weekly-milestones">3  Weekly milestones</a></li><li class="l2"><a href="#what-is-provided-and-what-you-write">4  What is provided and what you write</a></li><li class="l2"><a href="#directory-map">5  Directory map</a></li><li class="l2"><a href="#how-to-run">6  How to run</a></li><li class="l2"><a href="#deliverables">7  Deliverables</a></li><li class="l2"><a href="#sign-off-rule">8  Sign-off rule</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">J3-README</div>
+<h1>J3 sgdma_mm_rd - README</h1>
+<p class="subtitle">Getting started with the verification of sgdma_mm_rd</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> J3-README</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td><td><b>IP:</b> J3 sgdma_mm_rd</td></tr></table>
+</div>
+<div class="whatbox"><p><b>Your assignment:</b> verify the RTL block <code>sgdma_mm_rd</code> (Memory read engine (AXI4 read master)) to
+<b>functional coverage closure</b>, using a UVM testbench that you build on top of the provided harness and bus agents. You
+receive the RTL as a design drop together with its specification; treat it like any real block delivered by a design team:
+the specification is the reference, the RTL may contain mistakes, and your job is to find them, report them, and prove with
+coverage that every feature in your test plan has been exercised.</p>
+<p>Owner: <span class="field" contenteditable="false">&lt;your name&gt;</span> &nbsp; Reviewer: <span class="field" contenteditable="false">&lt;name&gt;</span></p></div>
+<div class="note">Start here, then keep these open in tabs: <a href='../specs/06_sgdma_mm_rd.html'>SPEC-06 sgdma_mm_rd</a>, <a href='tb_connections.html'>TB connections</a>, <a href='testplan.html'>test plan</a>, <a href='../uvm_cheatsheet.html'>UVM cheat sheet</a>, <a href='../glossary.html'>glossary</a>.</div>
+<h2 id="testbench-overview"><span class="num">1</span>Testbench overview</h2>
+<p>The picture shows the testbench you will complete: the DUT, the provided models and agents (already wired) and the parts you create. Port-by-port details are in <a href='tb_connections.html'>TB connections</a>.</p>
+<figure><pre class="mermaid">
+flowchart LR
+  subgraph TB["tb_top"]
+    direction LR
+    CR["sgdma_clk_rst u_clk_rst&lt;br/&gt;+ rst_if rst_if_i&lt;br/&gt;config_db: rst_vif"]:::model
+    PIF0["axi4_if axi_if_i&lt;br/&gt;config_db: axi_vif"]:::uvm
+    MEM["sgdma_axi_mem u_mem&lt;br/&gt;+ axi_mem_bd_if mem_if_i&lt;br/&gt;config_db: mem_vif"]:::model
+    DUT["sgdma_mm_rd u_dut"]:::dut
+    G_cmd["sgdma_cmd_if cmd_if_i&lt;br/&gt;config_db: cmd_vif"]:::yours
+    G_dout["sgdma_data_if dout_if_i&lt;br/&gt;config_db: dout_vif"]:::yours
+    G_sts["sgdma_sts_if sts_if_i&lt;br/&gt;config_db: sts_vif"]:::yours
+  end
+  subgraph ENV["your UVM env"]
+    direction TB
+    PA0["axi4_agent (passive monitor)"]:::uvm
+    A_cmd["your cmd agent"]:::yours
+    A_dout["your dout agent"]:::yours
+    A_sts["your sts agent"]:::yours
+    SCB["scoreboard + ref model&lt;br/&gt;coverage"]:::yours
+  end
+  CR --&gt;|"clk, rst_n"| DUT
+  PIF0 &lt;--&gt;|"m_axi_* (provided, already wired)"| DUT
+  PA0 --&gt;|"vif"| PIF0
+  PIF0 &lt;--&gt;|"AXI4 slave (provided, already wired)"| MEM
+  G_cmd &lt;-.-&gt;|"cmd, cmd_valid, cmd_ready (to be created + connected)"| DUT
+  A_cmd -.-&gt;|"vif"| G_cmd
+  G_dout &lt;-.-&gt;|"dout_data ... dout_ready (to be created + connected)"| DUT
+  A_dout -.-&gt;|"vif"| G_dout
+  G_sts &lt;-.-&gt;|"sts, sts_valid, sts_ready (to be created + connected)"| DUT
+  A_sts -.-&gt;|"vif"| G_sts
+  classDef dut fill:#ffd8a8,stroke:#d9480f,stroke-width:3px,color:#1a1a1a,font-weight:bold;
+  classDef model fill:#dbe4f0,stroke:#4a5d78,stroke-width:1.5px,color:#1a1a1a;
+  classDef uvm fill:#d3f0d8,stroke:#2b8a3e,stroke-width:1.5px,color:#1a1a1a;
+  classDef yours fill:#fff6bf,stroke:#b08900,stroke-width:1.5px,stroke-dasharray:6 4,color:#1a1a1a;
+  classDef ext fill:#ffffff,stroke:#868e96,stroke-width:1px,color:#495057;
+  classDef fsm fill:#e5dbff,stroke:#5f3dc4,stroke-width:2px,color:#1a1a1a;
+  classDef reg fill:#d0ebff,stroke:#1864ab,stroke-width:1.5px,color:#1a1a1a;
+  classDef comb fill:#ffffff,stroke:#495057,stroke-width:1px,color:#1a1a1a;
+  classDef port fill:#f1f3f5,stroke:#868e96,stroke-width:1px,color:#495057;
+</pre><div class="clegend"><b>Legend</b><span class="lg"><i class="sw sw-dut"></i>DUT / IP under verification</span><span class="lg"><i class="sw sw-model"></i>provided model (sgdma_clk_rst, sgdma_axi_mem, data FIFO)</span><span class="lg"><i class="sw sw-uvm"></i>provided UVM agent / interface (dv_lib)</span><span class="lg"><i class="sw sw-yours"></i>created by you (interface / agent / component), dashed border</span><span class="lg lg-note">solid arrows = provided, already wired &nbsp;|&nbsp; dotted arrows = to be created + connected</span></div><figcaption>Figure 1: Testbench of sgdma_mm_rd (provided parts and parts you create)</figcaption></figure>
+<h2 id="getting-started-step-by-step"><span class="num">2</span>Getting started, step by step</h2>
+<ol class="steps"><li class=""><span class="stepno">0</span><b>Set up and look around.</b> Unpack your work area. Read the directory map below. Open this README in a browser (all documents work offline). Check which simulator you use: <code>SIM=verilator</code> (default, needs <code>UVM_HOME</code>), <code>vcs</code>, <code>questa</code> or <code>xcelium</code>.</li><li class=""><span class="stepno">1</span><b>Run the smoke test.</b> <code>cd sim &amp;&amp; make run</code> must end with <code>RESULT: j3_harness_smoke_test seed=1 PASSED</code>. It proves that the RTL, the provided agents and the harness compile and run on your machine. If it fails, fix the tool setup before anything else.</li><li class=""><span class="stepno">2</span><b>Read the specs and write test plan v1.</b> Read <a href='../specs/10_sgdma_top_fifo.html'>SPEC-10 overview</a>, <a href='../specs/00_common_interfaces.html'>SPEC-00 interfaces</a> and <a href='../specs/06_sgdma_mm_rd.html'>SPEC-06 sgdma_mm_rd</a>, plus <a href='../specs/01_descriptor_and_csr_map.html'>SPEC-01</a> and <a href='../specs/03_mem_model.html'>SPEC-03 memory model</a>. Then fill in <a href='testplan.html'>testplan.html</a>: every spec ID should map to a feature row. Some rows are worked examples, the others are questions to answer. Draw your UVM environment and scoreboard diagrams in draw.io and insert them in the test plan.</li><li class="highlight"><span class="stepno">2b</span><b>Create your interfaces and wire tb_top.</b> Using <a href='tb_connections.html'>tb_connections.html</a>: write one interface per port group (add the files to <code>sim/my_tb.f</code>), complete the three TODO markers in <code>tb_top.sv</code> (declare instances, replace every <code>ph_*</code> placeholder at the DUT, <code>config_db::set</code> your virtual interfaces), delete the placeholders, then <b>rerun the smoke test</b>: it must still pass.</li><li class=""><span class="stepno">3</span><b>Build the environment skeleton.</b> In <code>tb_uvm/</code>: env config, env with the provided agent (cfg object + <code>config_db</code>, see <a href='../specs/11_dv_lib_agents.html'>SPEC-11</a>), empty scoreboard and coverage components connected. <code>make run TEST=j3_base_test</code> prints your component tree and passes.</li><li class=""><span class="stepno">4</span><b>First directed test.</b> Write a sequence item and a driver for your first port group and one directed sequence/test (e.g. <code>j3_single_cmd_test</code>). Look at the waveform (<code>WAVES=1</code>) and confirm the DUT does what the spec example walkthrough describes.</li><li class=""><span class="stepno">5</span><b>Complete your own agents.</b> Driver, monitor, sequencer, agent and config for every port group; monitors publish transactions on analysis ports; handshake / protocol checks (assertions in the interface or checks in the monitor).</li><li class=""><span class="stepno">6</span><b>Scoreboard, reference model, random tests.</b> Reference model computes the expected outputs from the observed inputs; the scoreboard compares every DUT output. Add random sequences and tests; list them with several seeds in <code>sim/regress.list</code>; run <code>make regress</code>.</li><li class=""><span class="stepno">7</span><b>Analyse failures and report design issues.</b> For every failing check decide: testbench mistake or design mistake? Re-read the spec ID. For a design issue fill in a report in <a href='bug_report.html'>bug_report.html</a> (spec ID, test, seed, expected vs. actual, waveform time).</li><li class=""><span class="stepno">8</span><b>Close functional coverage and sign off.</b> Implement the covergroups of your test plan, run the regression, fill holes with new tests or constraints, justify what cannot be hit, complete <a href='coverage_report.html'>coverage_report.html</a> and the sign-off table of the test plan.</li></ol>
+<h2 id="weekly-milestones"><span class="num">3</span>Weekly milestones</h2>
+<table>
+<caption>Table 1: Plan (5 to 7 weeks)</caption>
+<thead><tr><th>Week</th><th>Milestone</th><th>Done when ...</th></tr></thead><tbody>
+<tr><td>Week 1</td><td>Specification + test plan</td><td>Read SPEC-10, SPEC-00, your block spec (+ SPEC-01/03 if they apply). Run the smoke test. Write test plan v1 (features, first tests, first coverage ideas). Review it with your reviewer.</td></tr>
+<tr><td>Week 2</td><td>Interfaces, tb_top wiring, env skeleton, first directed test</td><td>Write your interfaces, wire tb_top (tb_connections), smoke test still passes. Env with the provided agent; base test builds; first directed test drives the DUT.</td></tr>
+<tr><td>Week 3</td><td>Your agents</td><td>Complete item / driver / monitor / agent / config for every port group; protocol checks in monitors or assertions; directed tests for the main features pass or show understood mismatches.</td></tr>
+<tr><td>Week 4</td><td>Scoreboard + reference model, random tests</td><td>Reference model and scoreboard compare every output; random sequences and random tests; regress.list with several seeds.</td></tr>
+<tr><td>Week 5</td><td>Finding and reporting design issues</td><td>Run regressions with many seeds and knob settings; analyse every failure (testbench or design?); write a bug report per design issue with spec ID, test, seed and waveform time.</td></tr>
+<tr><td>Week 6 (-7)</td><td>Functional coverage closure + sign-off</td><td>Covergroups from the test plan; fill holes with new tests or constraints; justify remaining holes; coverage report; final test-plan status; sign-off review.</td></tr>
+</tbody></table>
+<h2 id="what-is-provided-and-what-you-write"><span class="num">4</span>What is provided and what you write</h2>
+<table>
+<caption>Table 2: Split of work</caption>
+<thead><tr><th><span class="tag provided">provided</span></th><th><span class="tag yours">you write</span></th></tr></thead><tbody>
+<tr><td><ul><li>DUT RTL <code>rtl/sgdma_mm_rd/sgdma_mm_rd.sv</code> + <code>sgdma_pkg</code> (read-only)</li><li>clock / reset generator <code>sgdma_clk_rst</code> + <code>rst_if</code></li><li>memory model <code>sgdma_axi_mem</code> (instance <code>u_mem</code>) + backdoor interface <code>mem_vif</code></li><li><code>axi4_if</code> wired to AXI4 read master port m_axi_ar* / r* to sgdma_axi_mem (write channels tied off), config_db <code>"axi_vif"</code>, agent: axi4_agent (passive monitor) (with an example sequence / usage snippet)</li><li>Makefile, <code>rtl.f</code>, <code>dv_lib.f</code>, <code>harness.f</code></li><li><code>tb_top.sv</code> partially wired, smoke test <code>j3_harness_smoke_test</code></li><li>pre-created files in <code>tb_uvm/</code> and <code>tests/</code> with the intended structure and TODO markers (<code>j3_base_test</code> runs as delivered)</li></ul></td><td><ul><li>interfaces <code>sgdma_cmd_if</code>, <code>sgdma_data_if</code> (dout), <code>sgdma_sts_if</code> + tb_top wiring and config_db set</li><li><b>command driver</b>, <b>dout slave</b> (random dout_ready) + dout monitor, <b>status monitor</b> (+ sts_ready driver)</li><li>source-buffer setup through the memory backdoor, sequences (directed / random / error)</li><li>env + env config, scoreboard with a <b>reference model</b> (expected bursts, beats, keep, last, status), coverage collector, base test + tests, regress.list</li><li>test plan, bug reports, coverage report (pages in this folder)</li></ul></td></tr>
+</tbody></table>
+<h2 id="directory-map"><span class="num">5</span>Directory map</h2>
+<pre class="code"><code>j3_mm_rd/
+  docs/            this documentation set (this file: docs/j3_mm_rd/README.html)
+  rtl/             sgdma_mm_rd.sv, sgdma_pkg.sv, sgdma_clk_rst.sv, sgdma_axi_mem.sv     read-only
+  dv_lib/          provided interfaces + agents                                      read-only
+  harness/         tb_top.sv  (complete the TODO [1/3] [2/3] [3/3] parts)
+                   j3_harness_pkg.sv (smoke test), common include files
+  tb_uvm/          your interfaces, agents, env, scoreboard, reference model, coverage
+  tests/           j3_test_pkg.sv, j3_base_test.svh, j3_first_test.svh, your tests
+  sim/             Makefile, rtl.f, dv_lib.f, harness.f                              provided
+                   my_tb.f (your file list), regress.list (your regression)</code></pre>
+<p>If a name differs in your copy, <code>sim/*.f</code> is the reference. Details: <a href='../specs/12_harness_guide.html'>SPEC-12 Harness guide</a>.</p>
+<h2 id="how-to-run"><span class="num">6</span>How to run</h2>
+<pre class="code shell"><code>cd sim
+make run                                        # smoke test (j3_harness_smoke_test), seed 1
+make run TEST=j3_base_test                     # your env builds, topology printed
+make run TEST=&lt;test&gt; SEED=&lt;n&gt;                   # any test, any seed
+make run TEST=&lt;test&gt; SEED=&lt;n&gt; WAVES=1           # + waves.vcd
+make run TEST=&lt;test&gt; VERBOSITY=UVM_HIGH         # more messages
+make regress                                    # every line of regress.list
+make run SIM=vcs TEST=&lt;test&gt;                    # other simulators: vcs | questa | xcelium</code></pre>
+<p>Logs: <code>sim/logs/&lt;test&gt;_seed&lt;n&gt;.log</code>. A run passes when it has no UVM_ERROR and no UVM_FATAL (the Makefile prints <code>RESULT: ... PASSED</code>).</p>
+<h2 id="deliverables"><span class="num">7</span>Deliverables</h2>
+<table>
+<caption>Table 3: What you hand in (copy everything into ENGINEER_DELIVERABLES/j3_mm_rd/)</caption>
+<thead><tr><th>Deliverable</th><th>Where</th><th>When</th></tr></thead><tbody>
+<tr><td>Test plan (exported HTML + CSV + PDF)</td><td><a href='testplan.html'>testplan.html</a> &rarr; Export, into <code>testplan/</code></td><td>v1 end of week 1, final at sign-off</td></tr>
+<tr><td>Test-plan diagrams (draw.io source + exported image)</td><td><code>testplan/diagrams/*.drawio</code>, <code>*.png</code> / <code>*.svg</code></td><td>with test plan v1, updated at sign-off</td></tr>
+<tr><td>Interfaces + tb_top wiring</td><td><code>tb_uvm/</code>, <code>harness/tb_top.sv</code>, <code>sim/my_tb.f</code></td><td>week 2</td></tr>
+<tr><td>Agents, env, scoreboard, coverage</td><td><code>tb_uvm/</code></td><td>weeks 3-4</td></tr>
+<tr><td>Tests + regression list</td><td><code>tests/</code>, <code>sim/regress.list</code></td><td>weeks 2-6</td></tr>
+<tr><td>Bug reports (+ waveform screenshots)</td><td><a href='bug_report.html'>bug_report.html</a> &rarr; Export, into <code>bug_reports/</code> (images in <code>bug_reports/diagrams/</code>)</td><td>as soon as an issue is confirmed</td></tr>
+<tr><td>Coverage report</td><td><a href='coverage_report.html'>coverage_report.html</a> &rarr; Export, into <code>coverage/</code> (images in <code>coverage/diagrams/</code>)</td><td>sign-off</td></tr>
+</tbody></table>
+<div class="tip">The editable pages save automatically in your browser. Use <b>Export HTML</b> regularly and keep the exported files with your deliverables: browser storage is not a backup.</div>
+<h2 id="sign-off-rule"><span class="num">8</span>Sign-off rule</h2>
+<p>Functional coverage only: <b>100 % of the covergroups / coverpoints / crosses defined in your test plan</b>, or each hole justified in the coverage report. Code coverage is not required. In addition: every test-plan feature has a passing test (or a filed report that explains the failure), and every failure seen in the regression has been analysed.</p>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

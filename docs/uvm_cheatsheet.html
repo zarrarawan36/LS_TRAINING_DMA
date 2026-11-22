@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UVM Cheat Sheet</title>
+<link rel="stylesheet" href="css/spec.css">
+<script src="assets/js/mermaid.min.js"></script>
+<script src="assets/js/skins/default.js"></script>
+<script src="assets/js/wavedrom.min.js"></script>
+<script src="assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="specs/10_sgdma_top_fifo.html">System overview</a> <a href="specs/00_common_interfaces.html">Interfaces</a> <a href="specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="specs/02_clk_rst.html">Clock / reset</a> <a href="specs/03_mem_model.html">Memory model</a> <a href="specs/11_dv_lib_agents.html">DV library</a> <a href="specs/12_harness_guide.html">Harness guide</a> <a href="glossary.html">Glossary</a> <a href="uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#component-hierarchy">1  Component hierarchy</a></li><li class="l2"><a href="#phases">2  Phases</a></li><li class="l2"><a href="#factory-and-config-db">3  Factory and config_db</a></li><li class="l2"><a href="#sequence-sequencer-driver">4  Sequence, sequencer, driver</a></li><li class="l2"><a href="#worked-example-valid-ready-driver-and-monitor-toy-interface">5  Worked example: valid/ready driver and monitor (TOY interface)</a></li><li class="l2"><a href="#reactive-slave-responder-pattern">6  Reactive slave / responder pattern</a></li><li class="l2"><a href="#monitor-scoreboard">7  Monitor &amp;rarr; scoreboard</a></li><li class="l2"><a href="#functional-coverage">8  Functional coverage</a></li><li class="l2"><a href="#messages-and-verbosity">9  Messages and verbosity</a></li><li class="l2"><a href="#running-tests-and-seeds">10  Running tests and seeds</a></li><li class="l2"><a href="#reading-a-waveform">11  Reading a waveform</a></li><li class="l2"><a href="#common-mistakes">12  Common mistakes</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">UVM-REF</div>
+<h1>UVM Cheat Sheet</h1>
+<p class="subtitle">Phases, config_db, sequences, a complete valid/ready agent example, scoreboard, coverage, debugging</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> UVM-REF</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="component-hierarchy"><span class="num">1</span>Component hierarchy</h2>
+<figure><pre class="mermaid">
+flowchart TB
+  T["test (uvm_test)&lt;br/&gt;uvm_test_top"] --&gt; E["env (uvm_env)"]
+  E --&gt; A1["agent A (active)"]
+  E --&gt; A2["agent B (passive or reactive)"]
+  E --&gt; S["scoreboard&lt;br/&gt;+ reference model"]
+  E --&gt; C["coverage collector&lt;br/&gt;(uvm_subscriber)"]
+  A1 --&gt; SQ["sequencer"]
+  A1 --&gt; D["driver"]
+  A1 --&gt; M1["monitor"]
+  A2 --&gt; M2["monitor"]
+  SQ -- "items" --&gt; D
+  M1 -. "analysis port write()" .-&gt; S
+  M1 -. "write()" .-&gt; C
+  M2 -. "write()" .-&gt; S
+  SEQ["sequence (object)"] -. "start(sequencer)" .-&gt; SQ
+</pre><figcaption>Figure 1: Typical UVM environment (dotted = analysis connections)</figcaption></figure>
+<p>Full names show the path, e.g. <code>uvm_test_top.env.cmd_agt.drv</code>. Call <code>uvm_top.print_topology()</code> (the provided base test does) to print the tree.</p>
+<h2 id="phases"><span class="num">2</span>Phases</h2>
+<table>
+<caption>Table 1: Most used phases</caption>
+<thead><tr><th>Phase</th><th>Kind</th><th>What you do there</th></tr></thead><tbody>
+<tr><td>build_phase</td><td>function, top-down</td><td>create children with <code>type_id::create</code>, get config_db values</td></tr>
+<tr><td>connect_phase</td><td>function, bottom-up</td><td>connect driver &harr; sequencer, analysis ports &rarr; imps</td></tr>
+<tr><td>end_of_elaboration_phase</td><td>function</td><td>print topology, final structural checks</td></tr>
+<tr><td>run_phase</td><td>task (consumes time)</td><td>drivers and monitors loop forever; the test starts sequences between raise / drop objection</td></tr>
+<tr><td>extract / check_phase</td><td>function</td><td>scoreboard: anything expected but never seen? queues empty?</td></tr>
+<tr><td>report_phase</td><td>function</td><td>print summaries, PASS / FAIL</td></tr>
+</tbody></table>
+<pre class="code"><code>task run_phase(uvm_phase phase);
+  phase.raise_objection(this);       // keep the simulation running
+  rst_vif.wait_reset_released();
+  my_seq.start(env.cmd_agt.sqr);     // do the work
+  repeat (50) @(posedge rst_vif.clk); // let the last transactions drain
+  phase.drop_objection(this);        // run phase ends when nobody objects
+endtask</code></pre>
+<h2 id="factory-and-config-db"><span class="num">3</span>Factory and config_db</h2>
+<pre class="code"><code>// register every class with the factory
+`uvm_component_utils(my_driver)        // components (have a parent)
+`uvm_object_utils(my_item)             // objects: items, sequences, cfg
+
+drv  = my_driver::type_id::create("drv", this);   // component: name + parent
+item = my_item::type_id::create("item");          // object: name only
+
+// tb_top (module): publish a virtual interface for everybody
+uvm_config_db#(virtual toy_if)::set(null, "*", "toy_vif", toy_if_i);
+
+// any component: get it (always check the result!)
+if (!uvm_config_db#(virtual toy_if)::get(this, "", "toy_vif", vif))
+  `uvm_fatal("CFG", "toy_vif not found")
+
+// env: hand a cfg object to one agent only
+uvm_config_db#(toy_cfg)::set(this, "toy_agt", "cfg", toy_cfg_h);</code></pre>
+<div class="caution">The name in <code>set</code> and <code>get</code> must match exactly, and the <code>set</code> must happen before the <code>get</code> (tb_top sets before <code>run_test()</code>; an env sets before creating the child).</div>
+<h2 id="sequence-sequencer-driver"><span class="num">4</span>Sequence, sequencer, driver</h2>
+<figure><pre class="mermaid">
+sequenceDiagram
+  participant SEQ as sequence.body()
+  participant SQR as sequencer
+  participant DRV as driver.run_phase()
+  SEQ-&gt;&gt;SQR: start_item(req)  (waits for the driver)
+  DRV-&gt;&gt;SQR: seq_item_port.get_next_item(req)
+  SEQ-&gt;&gt;SEQ: req.randomize() with {...}
+  SEQ-&gt;&gt;SQR: finish_item(req)
+  SQR-&gt;&gt;DRV: req delivered
+  DRV-&gt;&gt;DRV: drive pins, wait for handshake
+  DRV-&gt;&gt;SQR: seq_item_port.item_done()
+  SQR-&gt;&gt;SEQ: finish_item returns
+</pre><figcaption>Figure 2: Item handshake between sequence and driver</figcaption></figure>
+<pre class="code"><code>class toy_item extends uvm_sequence_item;
+  `uvm_object_utils(toy_item)
+  rand bit [7:0]    payload;
+  rand int unsigned gap;                       // idle cycles before this item
+  constraint c_gap { gap inside {[0:5]}; }
+  function new(string name = "toy_item"); super.new(name); endfunction
+  virtual function string convert2string(); return $sformatf("payload=0x%02h gap=%0d", payload, gap); endfunction
+endclass
+
+class toy_rand_seq extends uvm_sequence #(toy_item);
+  `uvm_object_utils(toy_rand_seq)
+  rand int unsigned n = 20;
+  function new(string name = "toy_rand_seq"); super.new(name); endfunction
+  task body();
+    repeat (n) begin
+      req = toy_item::type_id::create("req");
+      start_item(req);
+      if (!req.randomize()) `uvm_fatal("SEQ", "randomize failed")
+      finish_item(req);
+    end
+  endtask
+endclass</code></pre>
+<h2 id="worked-example-valid-ready-driver-and-monitor-toy-interface"><span class="num">5</span>Worked example: valid/ready driver and monitor (TOY interface)</h2>
+<p>The <b>TOY</b> interface is made up for this example (it is not an SG-DMA port): an 8-bit <code>payload</code> with <code>valid</code> / <code>ready</code>, following the handshake rules of SPEC-00. The interface code is in <a href="specs/00_common_interfaces.html">SPEC-00, section 'Building a testbench interface'</a>.</p>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',     wave: 'p.......' },
+  { name: 'valid',   wave: '01..01.0' },
+  { name: 'payload', wave: 'x=..==.x', data: ['0x11', '0x22', '0x33'] },
+  { name: 'ready',   wave: '0..1..1.' }
+ ],
+ head: { text: 'TOY channel: 0x11 waits for ready, then 0x22 and 0x33 follow' } }
+</script></div><figcaption>Figure 3: TOY channel timing</figcaption></figure>
+<pre class="code"><code>// ---------------- driver: SENDER side -------------------------------------
+class toy_driver extends uvm_driver #(toy_item);
+  `uvm_component_utils(toy_driver)
+  virtual toy_chan_if vif;
+  function new(string name, uvm_component parent); super.new(name, parent); endfunction
+
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    if (!uvm_config_db#(virtual toy_chan_if)::get(this, "", "toy_vif", vif)) `uvm_fatal("DRV", "no vif")
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    vif.snd_cb.valid &lt;= 1'b0;
+    forever begin
+      wait (vif.rst_n === 1'b1);
+      seq_item_port.get_next_item(req);
+      repeat (req.gap) @(vif.snd_cb);
+      vif.snd_cb.payload &lt;= req.payload;        // present the item ...
+      vif.snd_cb.valid   &lt;= 1'b1;
+      do @(vif.snd_cb); while (vif.snd_cb.ready !== 1'b1);   // ... hold it until the handshake edge
+      vif.snd_cb.valid   &lt;= 1'b0;
+      seq_item_port.item_done();
+    end
+  endtask
+endclass
+
+// ---------------- monitor: only samples ------------------------------------
+class toy_monitor extends uvm_monitor;
+  `uvm_component_utils(toy_monitor)
+  virtual toy_chan_if vif;
+  uvm_analysis_port #(toy_item) ap;
+  function new(string name, uvm_component parent); super.new(name, parent); ap = new("ap", this); endfunction
+
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    if (!uvm_config_db#(virtual toy_chan_if)::get(this, "", "toy_vif", vif)) `uvm_fatal("MON", "no vif")
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    forever begin
+      @(vif.mon_cb);
+      if (vif.rst_n !== 1'b1) continue;                     // ignore everything during reset
+      if (vif.mon_cb.valid === 1'b1 &amp;&amp; vif.mon_cb.ready === 1'b1) begin
+        toy_item t = toy_item::type_id::create("t");        // a NEW object per transaction
+        t.payload = vif.mon_cb.payload;
+        ap.write(t);
+      end
+    end
+  endtask
+endclass</code></pre>
+<div class="tip">The driver of a <b>receiver</b> (drives only <code>ready</code>) does not need items at all: it can randomise <code>ready</code> every cycle from a percentage knob in its config object, like the provided axis slave driver.</div>
+<h2 id="reactive-slave-responder-pattern"><span class="num">6</span>Reactive slave / responder pattern</h2>
+<p>When the DUT is the one that sends requests (for example a command) and the testbench must answer (for example with a status), use a <b>reactive</b> agent: the monitor sees the request, a sequence decides the answer, the driver drives it.</p>
+<figure><pre class="mermaid">
+flowchart LR
+  DUT["DUT sends request"] --&gt; MON["monitor"]
+  MON -- "request item (analysis port)" --&gt; FIFO["uvm_tlm_analysis_fifo&lt;br/&gt;in the sequencer"]
+  FIFO -- "get()" --&gt; SEQ["responder sequence&lt;br/&gt;(forever loop)"]
+  SEQ -- "response item" --&gt; DRV["driver"]
+  DRV -- "drives the answer pins" --&gt; DUT
+</pre><figcaption>Figure 4: Reactive responder</figcaption></figure>
+<pre class="code"><code>class toy_resp_sequencer extends uvm_sequencer #(toy_item);
+  `uvm_component_utils(toy_resp_sequencer)
+  uvm_tlm_analysis_fifo #(toy_item) req_fifo;              // monitor.ap connects here
+  function new(string name, uvm_component parent); super.new(name, parent); req_fifo = new("req_fifo", this); endfunction
+endclass
+
+class toy_resp_seq extends uvm_sequence #(toy_item);
+  `uvm_object_utils(toy_resp_seq)
+  `uvm_declare_p_sequencer(toy_resp_sequencer)
+  function new(string name = "toy_resp_seq"); super.new(name); endfunction
+  task body();
+    toy_item request;
+    forever begin
+      p_sequencer.req_fifo.get(request);                   // wait for the DUT's request
+      req = toy_item::type_id::create("rsp");
+      start_item(req);
+      if (!req.randomize() with { payload == request.payload + 1; }) `uvm_fatal("SEQ", "randomize")
+      finish_item(req);                                    // driver sends the answer
+    end
+  endtask
+endclass
+// in the agent's connect_phase:  mon.ap.connect(sqr.req_fifo.analysis_export);
+// in the test:                   fork resp_seq.start(env.resp_agt.sqr); join_none</code></pre>
+<h2 id="monitor-scoreboard"><span class="num">7</span>Monitor &rarr; scoreboard</h2>
+<pre class="code"><code>`uvm_analysis_imp_decl(_in)       // one suffix per input port of the scoreboard
+`uvm_analysis_imp_decl(_out)
+
+class toy_scoreboard extends uvm_scoreboard;
+  `uvm_component_utils(toy_scoreboard)
+  uvm_analysis_imp_in  #(toy_item, toy_scoreboard) in_imp;
+  uvm_analysis_imp_out #(toy_item, toy_scoreboard) out_imp;
+  toy_item exp_q[$];
+  int n_ok, n_err;
+  function new(string name, uvm_component parent);
+    super.new(name, parent); in_imp = new("in_imp", this); out_imp = new("out_imp", this);
+  endfunction
+  function void write_in(toy_item t);                     // stimulus seen -&gt; predict
+    toy_item e = toy_item::type_id::create("e");
+    e.payload = t.payload;                                // reference model: here 'output = input'
+    exp_q.push_back(e);
+  endfunction
+  function void write_out(toy_item t);                    // DUT output seen -&gt; compare
+    toy_item e;
+    if (exp_q.size() == 0) begin `uvm_error("SCB", {"unexpected output ", t.convert2string()}) return; end
+    e = exp_q.pop_front();
+    if (t.payload !== e.payload) begin n_err++; `uvm_error("SCB", $sformatf("exp 0x%02h got 0x%02h", e.payload, t.payload)) end
+    else n_ok++;
+  endfunction
+  function void check_phase(uvm_phase phase);
+    if (exp_q.size() != 0) `uvm_error("SCB", $sformatf("%0d expected outputs never seen", exp_q.size()))
+  endfunction
+  function void report_phase(uvm_phase phase);
+    `uvm_info("SCB", $sformatf("compared %0d OK, %0d mismatches", n_ok, n_err), UVM_LOW)
+  endfunction
+endclass
+// env connect_phase:  in_agt.mon.ap.connect(scb.in_imp);  out_agt.mon.ap.connect(scb.out_imp);</code></pre>
+<h2 id="functional-coverage"><span class="num">8</span>Functional coverage</h2>
+<pre class="code"><code>class toy_coverage extends uvm_subscriber #(toy_item);
+  `uvm_component_utils(toy_coverage)
+  toy_item t;
+  covergroup cg;
+    cp_payload : coverpoint t.payload { bins zero = {0}; bins low = {[1:127]}; bins high = {[128:254]}; bins max = {255}; }
+    cp_gap     : coverpoint t.gap     { bins b2b = {0}; bins short_gap = {[1:2]}; bins long_gap = {[3:5]}; }
+    x_pay_gap  : cross cp_payload, cp_gap;
+  endgroup
+  function new(string name, uvm_component parent); super.new(name, parent); cg = new(); endfunction
+  function void write(toy_item t); this.t = t; cg.sample(); endfunction
+  function void report_phase(uvm_phase phase);
+    `uvm_info("COV", $sformatf("cg %.1f %% (payload %.1f, gap %.1f, cross %.1f)", cg.get_coverage(),
+              cg.cp_payload.get_coverage(), cg.cp_gap.get_coverage(), cg.x_pay_gap.get_coverage()), UVM_LOW)
+  endfunction
+endclass</code></pre>
+<div class="note">Sample where the information is complete and true: usually in a subscriber connected to a monitor (what really happened on the pins), not in the sequence (what you only wanted to happen).</div>
+<h2 id="messages-and-verbosity"><span class="num">9</span>Messages and verbosity</h2>
+<table>
+<caption>Table 2: Reporting macros</caption>
+<thead><tr><th>Macro</th><th>Use</th><th>Effect</th></tr></thead><tbody>
+<tr><td><code>`uvm_info(ID, msg, UVM_LOW)</code></td><td>progress and results</td><td>printed if verbosity &ge; level</td></tr>
+<tr><td><code>`uvm_warning(ID, msg)</code></td><td>suspicious but not wrong</td><td>counted, test still passes</td></tr>
+<tr><td><code>`uvm_error(ID, msg)</code></td><td>a check failed</td><td>counted, test FAILS, simulation continues</td></tr>
+<tr><td><code>`uvm_fatal(ID, msg)</code></td><td>cannot continue (missing vif, ...)</td><td>simulation stops</td></tr>
+</tbody></table>
+<p>Levels: UVM_NONE &lt; UVM_LOW &lt; UVM_MEDIUM (default) &lt; UVM_HIGH &lt; UVM_FULL &lt; UVM_DEBUG. Run with <code>make run TEST=... VERBOSITY=UVM_HIGH</code>. Put per-beat messages at UVM_HIGH so normal logs stay short.</p>
+<h2 id="running-tests-and-seeds"><span class="num">10</span>Running tests and seeds</h2>
+<table>
+<caption>Table 3: Run-time controls</caption>
+<thead><tr><th>Plusarg / make variable</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>+UVM_TESTNAME=&lt;class&gt;</code> (<code>make run TEST=&lt;class&gt;</code>)</td><td>which test class run_test() creates</td></tr>
+<tr><td>seed (<code>make run SEED=&lt;n&gt;</code>)</td><td>random seed; rerun the same seed to reproduce a failure exactly</td></tr>
+<tr><td><code>+UVM_VERBOSITY=...</code> (<code>VERBOSITY=</code>)</td><td>message filter</td></tr>
+<tr><td><code>+UVM_MAX_QUIT_COUNT=&lt;n&gt;</code></td><td>stop after n errors (pass with <code>PLUSARGS=</code>)</td></tr>
+<tr><td><code>+TB_TIMEOUT_NS=&lt;n&gt;</code></td><td>global watchdog of tb_top</td></tr>
+</tbody></table>
+<h2 id="reading-a-waveform"><span class="num">11</span>Reading a waveform</h2>
+<ol>
+<li>Run the failing test with the same seed and <code>WAVES=1</code>; open <code>sim/waves.vcd</code>.</li>
+<li>Find the time of the first <code>UVM_ERROR</code> in the log; go there in the viewer.</li>
+<li>Add the clock, reset and the valid/ready pair of the channel involved. A transfer happens only at a rising edge with both 1.</li>
+<li>Walk backwards: which input caused this output? Compare with the spec timing diagrams.</li>
+<li>Decide: did the DUT break a spec rule, or did your driver / model do something wrong?</li>
+</ol>
+<h2 id="common-mistakes"><span class="num">12</span>Common mistakes</h2>
+<table>
+<caption>Table 4: Frequent problems and their causes</caption>
+<thead><tr><th>Symptom</th><th>Usual cause</th></tr></thead><tbody>
+<tr><td>Test ends at time 0, nothing happens</td><td>no objection raised in run_phase, or the sequence was never started</td></tr>
+<tr><td>Simulation never ends (watchdog fatal)</td><td>driver waits for a ready that never comes; forever loop in the test; objection never dropped</td></tr>
+<tr><td><code>vif not found</code> fatal</td><td>config_db name / type mismatch between tb_top set and component get, or get in the wrong phase</td></tr>
+<tr><td>Null object access in build_phase</td><td>component created with <code>new</code> instead of <code>type_id::create</code>, or used before created</td></tr>
+<tr><td>Monitor reports every item twice / wrong values</td><td>sampling on both clock edges, or re-using one object for all transactions</td></tr>
+<tr><td>Scoreboard compares the wrong items</td><td>expected and actual queues out of order; predicting from the sequence instead of the monitor</td></tr>
+<tr><td>Driver changes data while valid waits</td><td>assigning the next item before the handshake (breaks IF-HS-002)</td></tr>
+<tr><td>Races between TB and DUT</td><td>driving with blocking assignments at the clock edge; use clocking blocks or non-blocking at a defined time</td></tr>
+<tr><td>Coverage stays 0</td><td>covergroup not constructed (<code>cg = new()</code>), or <code>sample()</code> never called</td></tr>
+<tr><td>Random test always does the same thing</td><td>constraints too tight, or the same seed every run</td></tr>
+</tbody></table>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

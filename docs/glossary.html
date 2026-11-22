@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glossary</title>
+<link rel="stylesheet" href="css/spec.css">
+<script src="assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="specs/10_sgdma_top_fifo.html">System overview</a> <a href="specs/00_common_interfaces.html">Interfaces</a> <a href="specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="specs/02_clk_rst.html">Clock / reset</a> <a href="specs/03_mem_model.html">Memory model</a> <a href="specs/11_dv_lib_agents.html">DV library</a> <a href="specs/12_harness_guide.html">Harness guide</a> <a href="glossary.html">Glossary</a> <a href="uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#bus-protocols">1  Bus protocols</a></li><li class="l2"><a href="#dma-and-design-terms">2  DMA and design terms</a></li><li class="l2"><a href="#verification-terms">3  Verification terms</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">GLOSSARY</div>
+<h1>Glossary</h1>
+<p class="subtitle">AXI4, AXI4-Lite, AXI-Stream, DMA and UVM terms</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> GLOSSARY</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<p>Terms used across the SG-DMA documents. Spec links point to the full definition.</p>
+<h2 id="bus-protocols"><span class="num">1</span>Bus protocols</h2>
+<table>
+<caption>Table 1: Bus protocols</caption>
+<thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><b>4 KB boundary</b></td><td>AXI rule: an INCR burst must not cross an address that is a multiple of 4096 (0x1000). Engines split bursts there.</td></tr>
+<tr><td><b>AXI-Stream (AXIS)</b></td><td>Point-to-point streaming bus without addresses: TDATA, TKEEP, TLAST, TUSER, TVALID, TREADY. Data flows in packets of beats.</td></tr>
+<tr><td><b>AXI4</b></td><td>ARM AMBA memory-mapped bus with five independent channels: write address (AW), write data (W), write response (B), read address (AR), read data (R). Supports bursts. Used between the DMA engines and memory.</td></tr>
+<tr><td><b>AXI4-Lite</b></td><td>Simplified AXI4: same five channels, but every transaction is a single 32-bit beat (no bursts). Used for registers.</td></tr>
+<tr><td><b>AxLEN / AxSIZE / AxBURST</b></td><td>AXI address-phase fields: number of beats - 1, bytes per beat (2 = 4 bytes), burst type.</td></tr>
+<tr><td><b>Back-pressure</b></td><td>The receiver holds READY = 0 so the sender must wait. Tests must apply it to find flow-control mistakes.</td></tr>
+<tr><td><b>Beat</b></td><td>One data transfer (one handshake) on a data channel: 4 bytes here.</td></tr>
+<tr><td><b>Burst</b></td><td>A series of beats belonging to one address phase on AXI4. Length = AxLEN + 1 beats (max 16 in this design).</td></tr>
+<tr><td><b>Byte lane</b></td><td>One 8-bit slice of the 32-bit data bus. Lane 0 = bits 7:0 = lowest address (little-endian).</td></tr>
+<tr><td><b>Channel</b></td><td>One group of signals with its own valid/ready handshake (e.g. the AXI AR channel, the SG-DMA cmd channel).</td></tr>
+<tr><td><b>FIXED burst</b></td><td>Every beat of the burst uses the same address. Used for FIFO-like targets (INC_SRC / INC_DST = 0).</td></tr>
+<tr><td><b>Handshake</b></td><td>A transfer on a rising clock edge where VALID = 1 and READY = 1 (<a href="specs/00_common_interfaces.html#IF-HS-001">SPEC-00 IF-HS-001</a>).</td></tr>
+<tr><td><b>INCR burst</b></td><td>Incrementing burst: beat k uses address + k &times; beat size. Normal memory access.</td></tr>
+<tr><td><b>Little-endian</b></td><td>The byte at the lowest address is the least significant byte of a word.</td></tr>
+<tr><td><b>OKAY / SLVERR</b></td><td>AXI responses: 2'b00 success, 2'b10 slave error. Returned on B (writes) and on every R beat (reads).</td></tr>
+<tr><td><b>Outstanding transaction</b></td><td>A transaction whose address has been sent but whose response has not yet arrived. The SG-DMA masters allow one per direction.</td></tr>
+<tr><td><b>RLAST / WLAST</b></td><td>Marks the last beat of an AXI read / write burst.</td></tr>
+<tr><td><b>TKEEP</b></td><td>AXI-Stream byte qualifier: TKEEP[i] = 1 means byte lane i of TDATA is part of the stream.</td></tr>
+<tr><td><b>TLAST</b></td><td>AXI-Stream: marks the last beat of a packet (end of packet, EOP).</td></tr>
+<tr><td><b>TUSER / SOP</b></td><td>AXI-Stream sideband; in this design TUSER = 1 marks the first beat of a packet (start of packet).</td></tr>
+<tr><td><b>VALID / READY</b></td><td>VALID: the sender has an item. READY: the receiver can take it. The item moves only when both are 1.</td></tr>
+<tr><td><b>WRAP burst</b></td><td>AXI burst type that wraps at a boundary; not used in this design.</td></tr>
+<tr><td><b>WSTRB</b></td><td>AXI write strobes: one bit per byte lane; only lanes with WSTRB = 1 are written.</td></tr>
+</tbody></table>
+<h2 id="dma-and-design-terms"><span class="num">2</span>DMA and design terms</h2>
+<table>
+<caption>Table 2: DMA and design terms</caption>
+<thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><b>Asynchronous reset</b></td><td>Reset that acts immediately, not waiting for a clock edge. rst_n here is active low.</td></tr>
+<tr><td><b>Chain</b></td><td>Descriptors linked by their NEXT_DESC pointers. Ends at NEXT_DESC = 0 or at a descriptor that is not OWNED.</td></tr>
+<tr><td><b>CSR</b></td><td>Control and status registers, accessed by software over AXI4-Lite.</td></tr>
+<tr><td><b>Descriptor</b></td><td>32-byte record in memory describing one job: source, destination, length, flags, next pointer, status (<a href="specs/01_descriptor_and_csr_map.html">SPEC-01</a>).</td></tr>
+<tr><td><b>DMA</b></td><td>Direct memory access: hardware that moves data without the CPU copying it.</td></tr>
+<tr><td><b>FIFO</b></td><td>First-in first-out buffer. FWFT (first-word fall-through): the oldest entry is visible at the output without a read cycle.</td></tr>
+<tr><td><b>Interrupt (irq)</b></td><td>Output that tells the CPU something needs attention; here a level signal.</td></tr>
+<tr><td><b>Level</b></td><td>A signal that holds its value for as long as the condition is true.</td></tr>
+<tr><td><b>M2M / M2S / S2M</b></td><td>Memory-to-memory, memory-to-stream, stream-to-memory transfer modes.</td></tr>
+<tr><td><b>OWNED flag</b></td><td>Descriptor CTRL bit 16: 1 = hardware may process it; the hardware clears it when done.</td></tr>
+<tr><td><b>Packet</b></td><td>A sequence of stream beats from start of packet to TLAST.</td></tr>
+<tr><td><b>Pulse</b></td><td>A signal that is 1 for exactly one clock cycle.</td></tr>
+<tr><td><b>Scatter-gather</b></td><td>The DMA follows a list of jobs (descriptors), so data can be gathered from / scattered to many buffers.</td></tr>
+<tr><td><b>Soft reset (SW_RESET)</b></td><td>Reset requested by software through a register; affects only part of the state.</td></tr>
+<tr><td><b>Sticky bit</b></td><td>A status bit that stays set after the event until software (or reset) clears it.</td></tr>
+<tr><td><b>W1C / RW1C</b></td><td>Write-1-to-clear: writing 1 to a bit clears it, writing 0 leaves it unchanged (e.g. interrupt status).</td></tr>
+<tr><td><b>Write-back</b></td><td>The hardware writes the STATUS word and the updated CTRL word back into the descriptor.</td></tr>
+</tbody></table>
+<h2 id="verification-terms"><span class="num">3</span>Verification terms</h2>
+<table>
+<caption>Table 3: Verification terms</caption>
+<thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><b>Agent</b></td><td>UVM component grouping sequencer, driver and monitor for one interface. Active = drives, passive = only monitors.</td></tr>
+<tr><td><b>Analysis port</b></td><td>One-to-many broadcast connection: monitor &rarr; scoreboard, coverage, ... (write() call).</td></tr>
+<tr><td><b>Bug report</b></td><td>Document describing one design issue: spec ID, test, seed, expected vs. actual, waveform time.</td></tr>
+<tr><td><b>Checker / assertion</b></td><td>Code that flags a rule violation: in the scoreboard, in a monitor, or an SVA property in an interface.</td></tr>
+<tr><td><b>Clocking block</b></td><td>Part of an interface that defines when signals are sampled and driven relative to a clock; avoids races.</td></tr>
+<tr><td><b>Code coverage</b></td><td>Measurement of which RTL lines / branches executed. Not part of this sign-off.</td></tr>
+<tr><td><b>config_db</b></td><td>UVM configuration database: tb_top sets virtual interfaces, components get them by name.</td></tr>
+<tr><td><b>Constrained-random test</b></td><td>Test whose stimulus is randomised within constraints; run with many seeds.</td></tr>
+<tr><td><b>Coverage closure</b></td><td>Reaching the coverage goal (100 % of your plan) or justifying every hole.</td></tr>
+<tr><td><b>Coverage hole</b></td><td>A bin that was never hit.</td></tr>
+<tr><td><b>Covergroup / coverpoint / bin / cross</b></td><td>Covergroup: a set of coverage items sampled together. Coverpoint: one value being measured. Bin: one value range of a coverpoint. Cross: combinations of coverpoints.</td></tr>
+<tr><td><b>Directed test</b></td><td>Test with hand-written specific stimulus for one feature.</td></tr>
+<tr><td><b>Driver</b></td><td>Component that turns items into pin activity on the interface.</td></tr>
+<tr><td><b>DUT</b></td><td>Design under test: the RTL block you verify.</td></tr>
+<tr><td><b>Factory</b></td><td>UVM mechanism that creates objects by type (type_id::create) and allows overriding them.</td></tr>
+<tr><td><b>Functional coverage</b></td><td>Measurement of which features / values / combinations the tests exercised, defined by you in covergroups.</td></tr>
+<tr><td><b>Interface / virtual interface</b></td><td>SystemVerilog bundle of signals; a virtual interface is a handle to it that class-based code can use.</td></tr>
+<tr><td><b>Monitor</b></td><td>Component that watches pins, rebuilds transactions and publishes them on an analysis port. Never drives.</td></tr>
+<tr><td><b>Objection</b></td><td>UVM mechanism that keeps the run phase alive while a test is active.</td></tr>
+<tr><td><b>Reactive agent / responder</b></td><td>An agent that answers requests from the DUT (e.g. returns a status after each command).</td></tr>
+<tr><td><b>Reference model</b></td><td>Model that computes the expected outputs from the inputs, following the specification.</td></tr>
+<tr><td><b>Regression</b></td><td>Running the whole list of tests and seeds, e.g. make regress.</td></tr>
+<tr><td><b>Scoreboard</b></td><td>Component that compares what the DUT did with what it should have done.</td></tr>
+<tr><td><b>Seed</b></td><td>Number that initialises the random generator; same seed = same simulation.</td></tr>
+<tr><td><b>Sequence</b></td><td>Object that generates a series of sequence items.</td></tr>
+<tr><td><b>Sequence item / transaction</b></td><td>Object describing one unit of activity (one command, one beat, one register access).</td></tr>
+<tr><td><b>Sequencer</b></td><td>Component that passes items from sequences to the driver.</td></tr>
+<tr><td><b>Smoke test</b></td><td>Minimal test proving that the environment compiles and runs.</td></tr>
+<tr><td><b>Spec ID</b></td><td>Unique identifier of one requirement in a specification (e.g. CSR-REG-003).</td></tr>
+<tr><td><b>SVA</b></td><td>SystemVerilog assertions: temporal properties checked by the simulator every clock.</td></tr>
+<tr><td><b>tb_top</b></td><td>Top-level SystemVerilog module: instantiates DUT, interfaces, clock/reset, publishes virtual interfaces, calls run_test().</td></tr>
+<tr><td><b>Test plan</b></td><td>Document listing features, tests, coverage and checks, mapped to spec IDs.</td></tr>
+<tr><td><b>Testbench (TB)</b></td><td>Everything around the DUT that drives stimulus and checks results.</td></tr>
+<tr><td><b>UVM</b></td><td>Universal Verification Methodology: SystemVerilog class library for reusable testbenches.</td></tr>
+<tr><td><b>Verbosity</b></td><td>Filter for UVM messages: UVM_NONE, UVM_LOW, UVM_MEDIUM, UVM_HIGH, UVM_FULL, UVM_DEBUG.</td></tr>
+<tr><td><b>Waveform / VCD</b></td><td>Recording of signal values over time; VCD is a common file format (waves.vcd).</td></tr>
+</tbody></table>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

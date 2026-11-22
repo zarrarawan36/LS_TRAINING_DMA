@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXI4 Memory Model (sgdma_axi_mem)</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/skins/default.js"></script>
+<script src="../assets/js/wavedrom.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-this-block-does">1  What this block does</a></li><li class="l3"><a href="#example-walkthrough">1.1  Example walkthrough</a></li><li class="l2"><a href="#parameters-and-ports">2  Parameters and ports</a></li><li class="l2"><a href="#functional-description">3  Functional description</a></li><li class="l2"><a href="#backdoor-api">4  Backdoor API</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-03</div>
+<h1>AXI4 Memory Model (sgdma_axi_mem)</h1>
+<p class="subtitle">AXI4 slave memory with backdoor, stall and error-range knobs</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-03</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-this-block-does"><span class="num">1</span>What this block does</h2>
+<div class="whatbox"><p><code>sgdma_axi_mem</code> is a simulation model of a memory with an AXI4 slave port. The DUT reads
+and writes it like real memory. Your testbench uses its <b>backdoor</b> functions to fill source buffers and descriptor chains
+before a test and to read destination buffers afterwards, in zero simulation time. Two <b>knobs</b> make the memory behave
+like a busy or faulty system: random stalls (ready/valid held low) and an address range that answers with SLVERR.</p>
+<p>Used by the testbenches of sgdma_desc, sgdma_mm_rd and sgdma_mm_wr. It is already instantiated as <code>u_mem</code> in
+those tb_tops.</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  DUT["DUT AXI4 master&lt;br/&gt;(desc / mm_rd / mm_wr)"] -- "AW, W, AR" --&gt; M["sgdma_axi_mem u_mem&lt;br/&gt;RD_LATENCY, WR_RESP_LATENCY"]
+  M -- "B, R" --&gt; DUT
+  BD["axi_mem_bd_if mem_if_i&lt;br/&gt;(backdoor, config_db mem_vif)"] -. "write_word / read_word&lt;br/&gt;set_stall_pct / set_error_range" .-&gt; M
+  MON["axi4_agent (passive monitor)"] -. "observes the bus" .- DUT
+</pre><figcaption>Figure 3-1: Memory model connections in a testbench</figcaption></figure>
+<h3 id="example-walkthrough"><span class="num">1.1</span>Example walkthrough</h3>
+<ol>
+<li>The test calls <code>mem_vif.write_word(32'h2000, 32'h4433_2211)</code>: byte 0x11 is at 0x2000, 0x22 at 0x2001, ...</li>
+<li>The DUT issues <code>AR: addr 0x2000, len 1 (2 beats), INCR</code>. The memory accepts it (ARREADY = 1), waits RD_LATENCY
+cycles and returns two R beats: <code>0x4433_2211</code> then the word at 0x2004 (0 if never written), RLAST on the second.</li>
+<li>The DUT writes <code>AW: 0x3000, len 0</code> + <code>W: 0xAABB_CCDD, WSTRB 0011</code>: only bytes 0x3000 (0xDD) and
+0x3001 (0xCC) change. B = OKAY.</li>
+<li>The test checks with <code>mem_vif.read_byte(32'h3001) == 8'hCC</code>.</li>
+</ol>
+<h2 id="parameters-and-ports"><span class="num">2</span>Parameters and ports</h2>
+<table>
+<caption>Table 3-1: Parameters (tb_top uses the defaults)</caption>
+<thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>RD_LATENCY</code></td><td>2</td><td>minimum cycles from the AR handshake to the first RVALID</td></tr>
+<tr><td><code>WR_RESP_LATENCY</code></td><td>1</td><td>minimum cycles from the last W handshake to BVALID</td></tr>
+</tbody></table>
+<p>Ports: <code>clk</code>, <code>rst_n</code> and a full AXI4 slave port <code>s_axi_*</code> with the signals AW (<code>awaddr awlen awsize awburst awvalid awready</code>), W (<code>wdata wstrb wlast wvalid wready</code>), B (<code>bresp bvalid bready</code>), AR (<code>araddr arlen arsize arburst arvalid arready</code>) and R (<code>rdata rresp rlast rvalid rready</code>), 32-bit address and data.</p>
+<h2 id="functional-description"><span class="num">3</span>Functional description</h2>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="MEM-STO-001"><td><span class="sid">MEM-STO-001</span></td><td>Storage is a sparse byte array covering the full 32-bit address space. A byte that was never written reads as 0x00.</td></tr>
+<tr id="MEM-STO-002"><td><span class="sid">MEM-STO-002</span></td><td>Words are little-endian (IF-DAT-001): <code>write_word(a, d)</code> stores d[7:0] at a and d[31:24] at a+3.</td></tr>
+<tr id="MEM-WR-001"><td><span class="sid">MEM-WR-001</span></td><td>AWREADY is 1 only when no write burst is in progress (one write burst at a time).</td></tr>
+<tr id="MEM-WR-002"><td><span class="sid">MEM-WR-002</span></td><td>WREADY is 1 only after the AW of the current burst has been accepted. Beat <i>k</i> is written to <code>AWADDR + 4*k</code> (INCR) or to <code>AWADDR</code> (FIXED). Only bytes with WSTRB = 1 are written.</td></tr>
+<tr id="MEM-WR-003"><td><span class="sid">MEM-WR-003</span></td><td>The burst ends after <code>AWLEN + 1</code> W beats; the response comes at least WR_RESP_LATENCY cycles later. BVALID is held until BREADY = 1.</td></tr>
+<tr id="MEM-RD-001"><td><span class="sid">MEM-RD-001</span></td><td>ARREADY is 1 only when no read burst is in progress. The first RVALID comes at least RD_LATENCY cycles after the AR handshake; beat <i>k</i> returns the word at <code>ARADDR + 4*k</code> (INCR) or <code>ARADDR</code> (FIXED); RLAST = 1 on beat ARLEN. RVALID / RDATA are held until RREADY = 1.</td></tr>
+<tr id="MEM-RD-002"><td><span class="sid">MEM-RD-002</span></td><td>Read and write bursts are independent and may be active at the same time.</td></tr>
+<tr id="MEM-ERR-001"><td><span class="sid">MEM-ERR-001</span></td><td>Read beat whose byte address lies in the error range: RDATA = 0, RRESP = SLVERR (per beat).</td></tr>
+<tr id="MEM-ERR-002"><td><span class="sid">MEM-ERR-002</span></td><td>Write beat whose byte address lies in the error range: the beat is not written; BRESP = SLVERR for the whole burst. Beats outside the range are written normally.</td></tr>
+<tr id="MEM-KNB-001"><td><span class="sid">MEM-KNB-001</span></td><td>Stall knob <code>set_stall_pct(p)</code>, p = 0 ... 90 (larger values are clamped to 90): in every cycle, independently, AWREADY, WREADY and ARREADY are held low with probability p %, and a gap (RVALID = 0) is inserted between R beats with probability p %.</td></tr>
+<tr id="MEM-KNB-002"><td><span class="sid">MEM-KNB-002</span></td><td>Memory contents and knob settings are not affected by <code>rst_n</code>. Reset only returns the bus state machines to idle.</td></tr>
+</tbody></table>
+<div class="important">The memory model does <b>not</b> check AXI rules (burst length, 4 KB crossing, WLAST position, stability of signals, ...). Checking what the DUT does on the bus is the job of your testbench (scoreboard, checks, assertions), using the provided passive <code>axi4_agent</code>.</div>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',     wave: 'p.........' },
+  { name: 'arvalid', wave: '010.......' },
+  { name: 'arready', wave: '1.........' },
+  { name: 'araddr',  wave: 'x=x.......', data: ['0x2000 len=2'] },
+  { name: 'rvalid',  wave: '0...1..0..' },
+  { name: 'rdata',   wave: 'x...===x..', data: ['D0', 'D1', 'D2'] },
+  { name: 'rlast',   wave: '0.....10..' },
+  { name: 'rready',  wave: '1.........' }
+ ],
+ head: { text: 'read burst, 3 beats, RD_LATENCY = 2, no stalls' } }
+</script></div><figcaption>Figure 3-2: Read burst timing (no stalls)</figcaption></figure>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',     wave: 'p.........' },
+  { name: 'awvalid', wave: '010.......' },
+  { name: 'awready', wave: '1.0....1..' },
+  { name: 'wvalid',  wave: '01.0......' },
+  { name: 'wready',  wave: '0.1.0.....' },
+  { name: 'wlast',   wave: '0.10......' },
+  { name: 'bvalid',  wave: '0....10...' },
+  { name: 'bready',  wave: '1.........' }
+ ],
+ head: { text: 'single-beat write: W waits until the AW is accepted; B after WR_RESP_LATENCY' } }
+</script></div><figcaption>Figure 3-3: Write burst timing (no stalls)</figcaption></figure>
+<h2 id="backdoor-api"><span class="num">4</span>Backdoor API</h2>
+<p>In tb_top the interface <code>axi_mem_bd_if mem_if_i</code> sits next to <code>u_mem</code> and is published in config_db as <b><code>"mem_vif"</code></b>. Get it in your env or test and call the functions:</p>
+<table>
+<caption>Table 3-2: axi_mem_bd_if functions</caption>
+<thead><tr><th>Function</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>write_byte(addr, data8)</code> / <code>read_byte(addr)</code></td><td>one byte</td></tr>
+<tr><td><code>write_word(addr, data32)</code> / <code>read_word(addr)</code></td><td>four bytes, little-endian</td></tr>
+<tr><td><code>clear_all()</code></td><td>forget every byte (all read as 0 again)</td></tr>
+<tr><td><code>set_error_range(lo, hi)</code></td><td>beats with byte address in [lo, hi] (inclusive) get SLVERR</td></tr>
+<tr><td><code>clear_error_range()</code></td><td>no more SLVERR</td></tr>
+<tr><td><code>set_stall_pct(p)</code></td><td>random stalls, p = 0 ... 90 %</td></tr>
+<tr><td><code>in_error_range(addr)</code></td><td>1 if addr is inside the active error range</td></tr>
+</tbody></table>
+<pre class="code"><code>virtual axi_mem_bd_if mem_vif;
+if (!uvm_config_db#(virtual axi_mem_bd_if)::get(this, "", "mem_vif", mem_vif))
+  `uvm_fatal("CFG", "mem_vif not found")
+
+// preload a source buffer with a known pattern
+for (int i = 0; i &lt; 64; i += 4) mem_vif.write_word(32'h2000 + i, 32'hA000_0000 + i);
+mem_vif.set_stall_pct(30);                         // busy memory
+mem_vif.set_error_range(32'h5000, 32'h50FF);       // faulty region
+...
+if (mem_vif.read_word(32'h3000) !== exp) `uvm_error("SCB", "destination mismatch")</code></pre>
+<div class="note">Backdoor accesses take zero time and are invisible on the AXI bus (the monitor does not see them).</div>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>

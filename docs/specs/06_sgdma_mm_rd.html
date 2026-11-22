@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sgdma_mm_rd - Memory Read Engine</title>
+<link rel="stylesheet" href="../css/spec.css">
+<script src="../assets/js/mermaid.min.js"></script>
+<script src="../assets/js/skins/default.js"></script>
+<script src="../assets/js/wavedrom.min.js"></script>
+<script src="../assets/js/spec.js"></script>
+</head>
+<body >
+<header class="topbar"><div class="brand">SG-DMA (AXI) Verification <small>Design &amp; Verification Specification Set</small></div><nav><a href="../specs/10_sgdma_top_fifo.html">System overview</a> <a href="../specs/00_common_interfaces.html">Interfaces</a> <a href="../specs/01_descriptor_and_csr_map.html">Descriptor / CSR map</a> <a href="../specs/02_clk_rst.html">Clock / reset</a> <a href="../specs/03_mem_model.html">Memory model</a> <a href="../specs/11_dv_lib_agents.html">DV library</a> <a href="../specs/12_harness_guide.html">Harness guide</a> <a href="../glossary.html">Glossary</a> <a href="../uvm_cheatsheet.html">UVM cheat sheet</a> <span class="sep" id="nav-home-sep" hidden>|</span><a id="nav-home" href="#" hidden>My README</a></nav></header>
+<div class="layout">
+<aside id="toc"><div class="toc-title">Contents</div><ul><li class="l2"><a href="#what-this-block-does">1  What this block does</a></li><li class="l3"><a href="#example-walkthrough">1.1  Example walkthrough</a></li><li class="l2"><a href="#ports">2  Ports</a></li><li class="l2"><a href="#functional-description">3  Functional description</a></li><li class="l3"><a href="#commands">3.1  Commands</a></li><li class="l3"><a href="#burst-generation">3.2  Burst generation</a></li><li class="l3"><a href="#data-output">3.3  Data output</a></li><li class="l3"><a href="#errors-and-status">3.4  Errors and status</a></li><li class="l2"><a href="#protocol-of-the-simple-ports-for-your-interfaces-and-agents">4  Protocol of the simple ports (for your interfaces and agents)</a></li></ul></aside>
+<main class="doc">
+<div class="titleblock">
+<div class="docid">SPEC-06</div>
+<h1>sgdma_mm_rd - Memory Read Engine</h1>
+<p class="subtitle">AXI4 read engine: command to bursts to data beats to status (verified by J3)</p>
+<div><span class="audience engineer">Verification engineer handout</span></div>
+<table class="meta"><tr><td><b>Document:</b> SPEC-06</td><td><b>Revision:</b> 1.0</td><td><b>Date:</b> 13 Nov 2026</td></tr></table>
+</div>
+<h2 id="what-this-block-does"><span class="num">1</span>What this block does</h2>
+<div class="whatbox"><p><code>sgdma_mm_rd</code> <b>reads memory</b>. It receives one command at a time ("read N bytes from
+address A"), splits the job into legal AXI4 read bursts, and sends every word it reads out on its <code>dout_*</code>
+data-beat port. When all data has left, it reports a status with the number of bytes read and an error flag.</p>
+<p>In your testbench the AXI4 side talks to the provided memory model (monitored by the passive <code>axi4_agent</code>). You
+write the command driver, a <code>dout</code> receiver (which drives <code>dout_ready</code>) with a monitor, and a status
+responder/monitor.</p></div>
+<figure><pre class="mermaid">
+flowchart LR
+  C["command side"] -- "cmd, cmd_valid" --&gt; R["sgdma_mm_rd"]
+  R -- cmd_ready --&gt; C
+  R -- "m_axi_ar*" --&gt; M[("memory")]
+  M -- "m_axi_r*" --&gt; R
+  R -- "dout_data, dout_keep, dout_last, dout_valid" --&gt; O["data consumer"]
+  O -- dout_ready --&gt; R
+  R -- "sts, sts_valid" --&gt; S["status side"]
+  S -- sts_ready --&gt; R
+</pre><figcaption>Figure 6-1: sgdma_mm_rd top-level I/O</figcaption></figure>
+<h3 id="example-walkthrough"><span class="num">1.1</span>Example walkthrough</h3>
+<ol>
+<li>Command <code>{addr 0x0000_1000, len_bytes 10, inc_addr 1, desc_id 3}</code> is transferred (<code>cmd_ready</code> was 1).</li>
+<li>10 bytes = 3 beats: the engine issues <code>AR addr=0x1000 len=2 size=2 burst=INCR</code>.</li>
+<li>The memory returns 3 beats. They appear on <code>dout</code>: keep <code>1111</code>, <code>1111</code>, <code>0011</code>;
+<code>dout_last = 1</code> on the third. <code>dout_data</code> = RDATA of each beat.</li>
+<li>After the third beat is accepted (<code>dout_ready</code>), the status <code>{desc_id 3, err 0, eop_seen 0, bytes_done 10}</code>
+is presented and held until <code>sts_ready</code>.</li>
+<li>After the status handshake <code>cmd_ready</code> returns to 1.</li>
+</ol>
+<h2 id="ports"><span class="num">2</span>Ports</h2>
+<table>
+<caption>Table 6-1: Port list</caption>
+<thead><tr><th>Port</th><th>Dir</th><th>Width / type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>clk</code></td><td><span class="tag in">in</span></td><td>1</td><td>clock, all logic on the rising edge</td></tr>
+<tr><td><code>rst_n</code></td><td><span class="tag in">in</span></td><td>1</td><td>asynchronous active-low reset</td></tr>
+<tr class="group"><td colspan="4">Command (valid/ready, SPEC-00)</td></tr>
+<tr><td><code>cmd</code></td><td><span class="tag in">in</span></td><td>sgdma_cmd_t</td><td>command payload (SPEC-00 Table 0-2)</td></tr>
+<tr><td><code>cmd_valid</code></td><td><span class="tag in">in</span></td><td>1</td><td>command present</td></tr>
+<tr><td><code>cmd_ready</code></td><td><span class="tag out">out</span></td><td>1</td><td>1 = engine idle, command can be accepted</td></tr>
+<tr class="group"><td colspan="4">AXI4 read master (SPEC-00 IF-AXI-*)</td></tr>
+<tr><td><code>m_axi_araddr</code></td><td><span class="tag out">out</span></td><td>32</td><td>read address</td></tr>
+<tr><td><code>m_axi_arlen</code></td><td><span class="tag out">out</span></td><td>8</td><td>beats - 1 (0 ... 15)</td></tr>
+<tr><td><code>m_axi_arsize</code></td><td><span class="tag out">out</span></td><td>3</td><td>always 3'b010 (4 bytes)</td></tr>
+<tr><td><code>m_axi_arburst</code></td><td><span class="tag out">out</span></td><td>2</td><td>INCR (01) or FIXED (00)</td></tr>
+<tr><td><code>m_axi_arvalid</code></td><td><span class="tag out">out</span></td><td>1</td><td></td></tr>
+<tr><td><code>m_axi_arready</code></td><td><span class="tag in">in</span></td><td>1</td><td></td></tr>
+<tr><td><code>m_axi_rdata</code></td><td><span class="tag in">in</span></td><td>32</td><td></td></tr>
+<tr><td><code>m_axi_rresp</code></td><td><span class="tag in">in</span></td><td>2</td><td>OKAY / SLVERR</td></tr>
+<tr><td><code>m_axi_rlast</code></td><td><span class="tag in">in</span></td><td>1</td><td></td></tr>
+<tr><td><code>m_axi_rvalid</code></td><td><span class="tag in">in</span></td><td>1</td><td></td></tr>
+<tr><td><code>m_axi_rready</code></td><td><span class="tag out">out</span></td><td>1</td><td></td></tr>
+<tr class="group"><td colspan="4">Data out (data-beat channel, SPEC-00)</td></tr>
+<tr><td><code>dout_data</code></td><td><span class="tag out">out</span></td><td>32</td><td>data bytes (lane 0 = lowest address)</td></tr>
+<tr><td><code>dout_keep</code></td><td><span class="tag out">out</span></td><td>4</td><td>byte enables</td></tr>
+<tr><td><code>dout_last</code></td><td><span class="tag out">out</span></td><td>1</td><td>final beat</td></tr>
+<tr><td><code>dout_valid</code></td><td><span class="tag out">out</span></td><td>1</td><td>beat present</td></tr>
+<tr><td><code>dout_ready</code></td><td><span class="tag in">in</span></td><td>1</td><td>beat accepted</td></tr>
+<tr class="group"><td colspan="4">Status (valid/ready, SPEC-00)</td></tr>
+<tr><td><code>sts</code></td><td><span class="tag out">out</span></td><td>sgdma_sts_t</td><td>status payload (SPEC-00 Table 0-3)</td></tr>
+<tr><td><code>sts_valid</code></td><td><span class="tag out">out</span></td><td>1</td><td>status present (held until sts_ready)</td></tr>
+<tr><td><code>sts_ready</code></td><td><span class="tag in">in</span></td><td>1</td><td>status accepted</td></tr>
+</tbody></table>
+<p>Parameters: none. <code>MAX_BURST_BEATS = 16</code> from <code>sgdma_pkg</code>.</p>
+<h2 id="functional-description"><span class="num">3</span>Functional description</h2>
+<h3 id="commands"><span class="num">3.1</span>Commands</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="MRD-CMD-001"><td><span class="sid">MRD-CMD-001</span></td><td><code>cmd_ready</code> = 1 only while idle (IF-CMD-001). Fields used: <code>addr</code>, <code>len_bytes</code>, <code>inc_addr</code>, <code>desc_id</code>; <code>gen_sop</code> / <code>gen_eop</code> are ignored.</td></tr>
+<tr id="MRD-CMD-002"><td><span class="sid">MRD-CMD-002</span></td><td>A command with <code>len_bytes = 0</code> or <code>addr[1:0] &ne; 0</code> is illegal: no AR, no dout beat; status <code>err = 1</code>, <code>bytes_done = 0</code>.</td></tr>
+</tbody></table>
+<h3 id="burst-generation"><span class="num">3.2</span>Burst generation</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="MRD-BRS-001"><td><span class="sid">MRD-BRS-001</span></td><td>Every burst has ARSIZE = 2. The number of beats of the next burst is the smallest of: 16, the number of beats still needed (<code>ceil(remaining_bytes / 4)</code>), and - for incrementing commands only - the number of 4-byte beats left before the next 4 KB boundary.</td></tr>
+<tr id="MRD-BRS-002"><td><span class="sid">MRD-BRS-002</span></td><td>Incrementing command (<code>inc_addr = 1</code>): ARBURST = INCR; the first burst starts at <code>addr</code>, each following burst at the previous address + 4 &times; beats. No burst crosses a 4 KB boundary (IF-AXI-004).</td></tr>
+<tr id="MRD-BRS-003"><td><span class="sid">MRD-BRS-003</span></td><td>Fixed command (<code>inc_addr = 0</code>): <b>every</b> burst of the command has ARBURST = FIXED and ARADDR = <code>addr</code>; all beats read the same address.</td></tr>
+<tr id="MRD-BRS-004"><td><span class="sid">MRD-BRS-004</span></td><td>One burst at a time: the next AR is issued only after the RLAST beat of the previous burst (IF-AXI-005).</td></tr>
+</tbody></table>
+<table>
+<caption>Table 6-2: Burst splitting examples</caption>
+<thead><tr><th>addr</th><th>len_bytes</th><th>inc_addr</th><th>Bursts (ARADDR / beats / ARBURST)</th></tr></thead><tbody>
+<tr><td>0x0000_1000</td><td>10</td><td>1</td><td>0x1000 / 3 / INCR</td></tr>
+<tr><td>0x0000_2000</td><td>100</td><td>1</td><td>0x2000 / 16 / INCR, 0x2040 / 9 / INCR</td></tr>
+<tr><td>0x0000_0FF0</td><td>64</td><td>1</td><td>0x0FF0 / 4 / INCR (4 KB boundary at 0x1000), 0x1000 / 12 / INCR</td></tr>
+<tr><td>0x0000_5000</td><td>100</td><td>0</td><td>0x5000 / 16 / FIXED, 0x5000 / 9 / FIXED</td></tr>
+</tbody></table>
+<h3 id="data-output"><span class="num">3.3</span>Data output</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="MRD-DAT-001"><td><span class="sid">MRD-DAT-001</span></td><td>Every R beat produces exactly one dout beat, in order, with <code>dout_data</code> = RDATA.</td></tr>
+<tr id="MRD-DAT-002"><td><span class="sid">MRD-DAT-002</span></td><td><code>dout_keep</code> = <code>1111</code> on every beat except the final beat of the command, which carries <code>keep_mask(n)</code> where n = 1 ... 4 is the number of bytes left: <code>0001</code>, <code>0011</code>, <code>0111</code> or <code>1111</code>.</td></tr>
+<tr id="MRD-DAT-003"><td><span class="sid">MRD-DAT-003</span></td><td><code>dout_last</code> = 1 on the final beat of the command only (see also MRD-ERR-001).</td></tr>
+<tr id="MRD-DAT-004"><td><span class="sid">MRD-DAT-004</span></td><td>The engine has a one-beat output register. RREADY is 1 only when that register is empty or is being emptied in the same cycle, so <code>dout</code> back-pressure stalls the AXI read data and no beat is lost.</td></tr>
+</tbody></table>
+<h3 id="errors-and-status"><span class="num">3.4</span>Errors and status</h3>
+<table class="req">
+<thead><tr><th>Spec ID</th><th>Requirement (the design SHALL ...)</th></tr></thead><tbody>
+<tr id="MRD-ERR-001"><td><span class="sid">MRD-ERR-001</span></td><td>If a beat arrives with RRESP &ne; OKAY: <code>err</code> is set; the beat is still forwarded on dout (with the data returned by the memory); the current burst is received to its end; no further burst is issued; the last beat of that burst carries <code>dout_last = 1</code>.</td></tr>
+<tr id="MRD-STS-001"><td><span class="sid">MRD-STS-001</span></td><td>The status is presented only after the final dout beat has been accepted (<code>dout_valid &amp; dout_ready</code>).</td></tr>
+<tr id="MRD-STS-002"><td><span class="sid">MRD-STS-002</span></td><td>Status fields: <code>desc_id</code> = command's desc_id; <code>eop_seen</code> = 0; <code>err</code> as above; <code>bytes_done</code> = bytes delivered on dout before the first beat with an error response (equals <code>len_bytes</code> without error).</td></tr>
+<tr id="MRD-STS-003"><td><span class="sid">MRD-STS-003</span></td><td>After the status handshake the engine returns to idle and raises <code>cmd_ready</code>.</td></tr>
+</tbody></table>
+<figure><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --&gt; IDLE
+  IDLE --&gt; STS : illegal command
+  IDLE --&gt; AR : legal command
+  AR --&gt; R : AR handshake
+  R --&gt; AR : RLAST, more data needed, no error
+  R --&gt; DRAIN : RLAST and (last data or error)
+  DRAIN --&gt; STS : final dout beat accepted
+  STS --&gt; IDLE : sts handshake
+</pre><figcaption>Figure 6-2: sgdma_mm_rd states</figcaption></figure>
+<figure><div class="wavewrap"><script type="WaveDrom">
+{ signal: [
+  { name: 'clk',        wave: 'p............' },
+  { name: 'cmd_valid',  wave: '010..........' },
+  { name: 'cmd_ready',  wave: '1.0.........1' },
+  { name: 'arvalid',    wave: '0.10.........' },
+  { name: 'arlen',      wave: 'x.=x.........', data: ['2'] },
+  { name: 'rvalid',     wave: '0....1..0....' },
+  { name: 'rlast',      wave: '0......10....' },
+  { name: 'dout_valid', wave: '0.....1..0...' },
+  { name: 'dout_keep',  wave: 'x.....=.=x...', data: ['1111', '0011'] },
+  { name: 'dout_last',  wave: '0.......10...' },
+  { name: 'dout_ready', wave: '1............' },
+  { name: 'sts_valid',  wave: '0.........10.' },
+  { name: 'sts_ready',  wave: '1............' }
+ ],
+ head: { text: '10-byte command: one 3-beat burst, final keep 0011, status after the last beat (illustrative)' } }
+</script></div><figcaption>Figure 6-3: Command, burst, data and status</figcaption></figure>
+<h2 id="protocol-of-the-simple-ports-for-your-interfaces-and-agents"><span class="num">4</span>Protocol of the simple ports (for your interfaces and agents)</h2>
+<ul>
+<li><b>cmd</b> (you send): suggested interface <code>sgdma_cmd_if</code>, name <code>cmd_vif</code>. Follow IF-HS-*; send the next command
+only when the engine is ready; <code>cmd_valid = 0</code> during reset.</li>
+<li><b>dout</b> (the DUT sends, you drive <code>dout_ready</code>): suggested interface <code>sgdma_data_if</code>, name <code>dout_vif</code>.
+Randomise <code>dout_ready</code> to create back-pressure; your monitor records every handshake beat.</li>
+<li><b>sts</b> (the DUT sends, you drive <code>sts_ready</code>): suggested interface <code>sgdma_sts_if</code>, name <code>sts_vif</code>.</li>
+</ul>
+<footer class="docfoot">SG-DMA (AXI) design &amp; verification specification set. Offline document; diagrams are rendered with the local copies of Mermaid and WaveDrom in assets/js/.</footer>
+</main>
+</div>
+</body>
+</html>
