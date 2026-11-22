@@ -1,32 +1,41 @@
+`timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// j3_cmd_item : transaction for the 'cmd' port group
-//
-// STATUS : SKELETON - structure only. Everything marked TODO is yours.
-// Spec   : SPEC-06 port table (valid/ready command channel, SPEC-00 command channel + handshake rules)
+// sgdma_sts_if : status channel interface for sgdma_mm_rd
+//   DUT ports: sts (out, sgdma_sts_t), sts_valid (out), sts_ready (in)
+//   Suggested config_db name: "sts_vif"
+// Spec references: SPEC-00 (valid/ready status channel), SPEC-06, tb_connections
 // -----------------------------------------------------------------------------
-//
-// Ports of this group (from the DUT port table):
-//     cmd              DUT input  (you drive)  sgdma_cmd_t  struct from sgdma_pkg
-//     cmd_valid        DUT input  (you drive)  logic
-//     cmd_ready        DUT output (you sample)  logic
-//
-// TODO: decide what ONE transaction of this group is and add its
-//               fields as 'rand' variables (things you drive) or plain
-//               variables (things the monitor observes). Add constraints for
-//               legal values, convert2string() for printing and do_copy().
-// -----------------------------------------------------------------------------
-class j3_cmd_item extends uvm_sequence_item;
+interface sgdma_sts_if (input logic clk, input logic rst_n);
+  import sgdma_pkg::*;
 
-  `uvm_object_utils(j3_cmd_item)
+  sgdma_sts_t sts;
+  logic       valid;   // sts_valid
+  logic       ready;   // sts_ready
 
-  // TODO: fields
+  // Driver clocking (TB receiver drives ready, samples status/valid)
+  clocking cb_drv @(posedge clk);
+    default input #1step output #0;
+    input  sts;
+    input  valid;
+    output ready;
+  endclocking
 
-  function new(string name = "j3_cmd_item");
-    super.new(name);
-  endfunction
+  // Monitor clocking (samples all channel signals)
+  clocking cb_mon @(posedge clk);
+    default input #1step output #0;
+    input sts;
+    input valid;
+    input ready;
+  endclocking
 
-  virtual function string convert2string();
-    return "TODO: print the fields";
-  endfunction
+  modport drv (clocking cb_drv, input clk, input rst_n);
+  modport mon (clocking cb_mon, input clk, input rst_n);
 
-endclass : j3_cmd_item
+  // Optional protocol checks (enable/refine as needed)
+  // property p_sts_stable;
+  //   @(posedge clk) disable iff (!rst_n)
+  //     (valid && !ready) |=> (valid && $stable(sts));
+  // endproperty
+  // assert property (p_sts_stable);
+
+endinterface : sgdma_sts_if
