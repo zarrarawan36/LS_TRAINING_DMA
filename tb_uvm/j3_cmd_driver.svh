@@ -1,25 +1,13 @@
 // -----------------------------------------------------------------------------
 // j3_cmd_driver : drives the DUT inputs of the 'cmd' group
 //
-// STATUS : SKELETON - structure only. Everything marked TODO is yours.
-// Spec   : SPEC-06 port table (valid/ready command channel, SPEC-00 command channel + handshake rules)
-// -----------------------------------------------------------------------------
-//
-//   This group has DUT inputs you must drive: cmd, cmd_valid.
-//   Steps (see axi4lite_driver.svh in dv_lib for a commented example):
-//     1. build_phase : get your virtual interface (config_db name "cmd_vif")
-//     2. run_phase   : drive idle values, wait for rst_n = 1
-//     3. forever: get_next_item(req) -> drive it with the handshake rules of
-//                 SPEC-00 -> item_done()
-//   Some groups only need READY driven (e.g. a status or data receiver). For
-//   those you may drive READY every cycle from a config knob instead of using
-//   sequences (look at axis_slave_driver.svh for that style).
+// Spec   : SPEC-00 command channel handshake, SPEC-06 (MRD-CMD-*)
 // -----------------------------------------------------------------------------
 class j3_cmd_driver extends uvm_driver #(j3_cmd_item);
 
   `uvm_component_utils(j3_cmd_driver)
 
-  // TODO: virtual <your_interface> vif;
+  virtual j3_cmd_if vif;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -27,11 +15,42 @@ class j3_cmd_driver extends uvm_driver #(j3_cmd_item);
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    // TODO: get the vif from uvm_config_db, `uvm_fatal if missing
+    if (!uvm_config_db#(virtual j3_cmd_if)::get(this, "", "cmd_vif", vif) || vif == null)
+      `uvm_fatal("J3_CMD_DRV", "cmd_vif not found in config_db")
   endfunction
 
   task run_phase(uvm_phase phase);
-    // TODO: idle values, wait for reset release, main loop
+    j3_cmd_item req;
+
+    // Idle outputs
+    vif.cb_drv.valid <= 1'b0;
+    vif.cb_drv.cmd.addr      <= '0;
+    vif.cb_drv.cmd.len_bytes <= '0;
+    vif.cb_drv.cmd.inc_addr  <= 1'b0;
+    vif.cb_drv.cmd.gen_sop   <= 1'b0;
+    vif.cb_drv.cmd.gen_eop   <= 1'b0;
+    vif.cb_drv.cmd.desc_id   <= '0;
+
+    @(posedge vif.rst_n);
+    @(vif.cb_drv);
+
+    forever begin
+      seq_item_port.get_next_item(req);
+
+      // Drive command and assert valid; hold stable until accepted.
+      vif.cb_drv.cmd.addr      <= req.addr;
+      vif.cb_drv.cmd.len_bytes <= req.len_bytes;
+      vif.cb_drv.cmd.inc_addr  <= req.inc_addr;
+      vif.cb_drv.cmd.gen_sop   <= req.gen_sop;
+      vif.cb_drv.cmd.gen_eop   <= req.gen_eop;
+      vif.cb_drv.cmd.desc_id   <= req.desc_id;
+      vif.cb_drv.valid         <= 1'b1;
+
+      do @(vif.cb_drv); while (vif.cb_drv.ready !== 1'b1);
+
+      vif.cb_drv.valid <= 1'b0;
+      seq_item_port.item_done();
+    end
   endtask
 
 endclass : j3_cmd_driver

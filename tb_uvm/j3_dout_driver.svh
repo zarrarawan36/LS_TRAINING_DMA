@@ -1,25 +1,16 @@
 // -----------------------------------------------------------------------------
-// j3_dout_driver : drives the DUT inputs of the 'dout' group
+// j3_dout_driver : drives the DUT inputs of the 'dout' group (TB drives dout_ready)
 //
-// STATUS : SKELETON - structure only. Everything marked TODO is yours.
-// Spec   : SPEC-06 port table (valid/ready data-beat channel, SPEC-00 data-beat channel)
-// -----------------------------------------------------------------------------
-//
-//   This group has DUT inputs you must drive: dout_ready.
-//   Steps (see axi4lite_driver.svh in dv_lib for a commented example):
-//     1. build_phase : get your virtual interface (config_db name "dout_vif")
-//     2. run_phase   : drive idle values, wait for rst_n = 1
-//     3. forever: get_next_item(req) -> drive it with the handshake rules of
-//                 SPEC-00 -> item_done()
-//   Some groups only need READY driven (e.g. a status or data receiver). For
-//   those you may drive READY every cycle from a config knob instead of using
-//   sequences (look at axis_slave_driver.svh for that style).
+// Spec   : SPEC-00 data-beat channel handshake, SPEC-06 (MRD-DATA-*)
 // -----------------------------------------------------------------------------
 class j3_dout_driver extends uvm_driver #(j3_dout_item);
 
   `uvm_component_utils(j3_dout_driver)
 
-  // TODO: virtual <your_interface> vif;
+  virtual j3_data_if vif;
+
+  // Default ready behavior: 1 => always ready.
+  bit always_ready = 1'b1;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -27,11 +18,22 @@ class j3_dout_driver extends uvm_driver #(j3_dout_item);
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    // TODO: get the vif from uvm_config_db, `uvm_fatal if missing
+    if (!uvm_config_db#(virtual j3_data_if)::get(this, "", "dout_vif", vif) || vif == null)
+      `uvm_fatal("J3_DOUT_DRV", "dout_vif not found in config_db")
   endfunction
 
   task run_phase(uvm_phase phase);
-    // TODO: idle values, wait for reset release, main loop
+    // Idle: not ready
+    vif.cb_drv.ready <= 1'b0;
+
+    @(posedge vif.rst_n);
+    forever begin
+      @(vif.cb_drv);
+      if (always_ready)
+        vif.cb_drv.ready <= 1'b1;
+      else
+        vif.cb_drv.ready <= 1'b0;
+    end
   endtask
 
 endclass : j3_dout_driver

@@ -1,24 +1,14 @@
 // -----------------------------------------------------------------------------
 // j3_sts_monitor : observes the 'sts' group
 //
-// STATUS : SKELETON - structure only. Everything marked TODO is yours.
-// Spec   : SPEC-06 port table (valid/ready status channel, SPEC-00 status channel + handshake rules)
-// -----------------------------------------------------------------------------
-//
-//   Steps (see axi4lite_monitor.svh in dv_lib for a commented example):
-//     1. build_phase : get the virtual interface ("sts_vif")
-//     2. run_phase   : on every rising clk edge, when a transfer happens
-//                      (valid && ready, or a pulse / level change for plain
-//                      wires) create a NEW item, fill it, ap.write(item)
-//   The monitor only observes. It never drives a signal and never checks.
+// Spec   : SPEC-00 status channel handshake, SPEC-06 (MRD-STS-*)
 // -----------------------------------------------------------------------------
 class j3_sts_monitor extends uvm_monitor;
 
   `uvm_component_utils(j3_sts_monitor)
 
   uvm_analysis_port #(j3_sts_item) ap;
-
-  // TODO: virtual <your_interface> vif;
+  virtual sgdma_sts_if vif;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -27,11 +17,21 @@ class j3_sts_monitor extends uvm_monitor;
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    // TODO: get the vif from uvm_config_db
+    if (!uvm_config_db#(virtual sgdma_sts_if)::get(this, "", "sts_vif", vif) || vif == null)
+      `uvm_fatal("J3_STS_MON", "sts_vif not found in config_db")
   endfunction
 
   task run_phase(uvm_phase phase);
-    // TODO: sample the interface, publish items on ap
+    j3_sts_item tr;
+    forever begin
+      @(vif.cb_mon);
+      if (vif.rst_n !== 1'b1) continue;
+      if (vif.cb_mon.valid === 1'b1 && vif.cb_mon.ready === 1'b1) begin
+        tr = j3_sts_item::type_id::create("sts_tr", this);
+        tr.set_from_sts(vif.cb_mon.sts);
+        ap.write(tr);
+      end
+    end
   endtask
 
 endclass : j3_sts_monitor
