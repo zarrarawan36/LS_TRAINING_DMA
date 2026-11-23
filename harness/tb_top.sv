@@ -58,26 +58,10 @@ module tb_top;
   //   One interface per signal group listed on the TB connections page, e.g.
   //     my_cmd_if cmd_if_i (.clk(clk), .rst_n(rst_n));
   // ===========================================================================
+  j3_cmd_if    cmd_if_i  (.clk(clk), .rst_n(rst_n));
+  j3_data_if   dout_if_i (.clk(clk), .rst_n(rst_n));
+  sgdma_sts_if sts_if_i  (.clk(clk), .rst_n(rst_n));
 
-
-  // ---------------------------------------------------------------------------
-  // PLACEHOLDERS: keep the DUT compiling until your interfaces exist.
-  // Delete each line once its DUT port is connected to your interface.
-  // ---------------------------------------------------------------------------
-  // group 'cmd': command  (suggested config_db name "cmd_vif")
-  sgdma_cmd_t ph_cmd = '0;                 // TODO: DUT input, tied off -> connect to your interface
-  logic ph_cmd_valid = 1'b0;               // TODO: DUT input, tied off -> connect to your interface
-  logic ph_cmd_ready;                      // TODO: DUT output, unused -> connect to your interface
-  // group 'dout': dout data beats (the DUT SENDS beats, you drive ready)  (suggested config_db name "dout_vif")
-  logic [31:0] ph_dout_data;               // TODO: DUT output, unused -> connect to your interface
-  logic [3:0] ph_dout_keep;                // TODO: DUT output, unused -> connect to your interface
-  logic ph_dout_last;                      // TODO: DUT output, unused -> connect to your interface
-  logic ph_dout_valid;                     // TODO: DUT output, unused -> connect to your interface
-  logic ph_dout_ready = 1'b0;              // TODO: DUT input, tied off -> connect to your interface
-  // group 'sts': status  (suggested config_db name "sts_vif")
-  sgdma_sts_t ph_sts;                      // TODO: DUT output, unused -> connect to your interface
-  logic ph_sts_valid;                      // TODO: DUT output, unused -> connect to your interface
-  logic ph_sts_ready = 1'b0;               // TODO: DUT input, tied off -> connect to your interface
 
   // ---------------------------------------------------------------------------
   // DUT
@@ -87,9 +71,9 @@ module tb_top;
   sgdma_mm_rd u_dut (
     .clk           (clk),
     .rst_n         (rst_n),
-    .cmd           (ph_cmd),
-    .cmd_valid     (ph_cmd_valid),
-    .cmd_ready     (ph_cmd_ready),
+    .cmd           (cmd_if_i.cmd),
+    .cmd_valid     (cmd_if_i.valid),
+    .cmd_ready     (cmd_if_i.ready),
     .m_axi_araddr  (axi_if_i.araddr),
     .m_axi_arlen   (axi_if_i.arlen),
     .m_axi_arsize  (axi_if_i.arsize),
@@ -101,14 +85,14 @@ module tb_top;
     .m_axi_rlast   (axi_if_i.rlast),
     .m_axi_rvalid  (axi_if_i.rvalid),
     .m_axi_rready  (axi_if_i.rready),
-    .dout_data     (ph_dout_data),
-    .dout_keep     (ph_dout_keep),
-    .dout_last     (ph_dout_last),
-    .dout_valid    (ph_dout_valid),
-    .dout_ready    (ph_dout_ready),
-    .sts           (ph_sts),
-    .sts_valid     (ph_sts_valid),
-    .sts_ready     (ph_sts_ready)
+    .dout_data     (dout_if_i.data),
+    .dout_keep     (dout_if_i.keep),
+    .dout_last     (dout_if_i.last),
+    .dout_valid    (dout_if_i.valid),
+    .dout_ready    (dout_if_i.ready),
+    .sts           (sts_if_i.sts),
+    .sts_valid     (sts_if_i.valid),
+    .sts_ready     (sts_if_i.ready)
   );
 
   sgdma_axi_mem #(.RD_LATENCY(2), .WR_RESP_LATENCY(1)) u_mem (
@@ -149,9 +133,10 @@ module tb_top;
 
     // =========================================================================
     // TODO [3/3]: uvm_config_db::set your vifs here (BEFORE run_test)
-    //   e.g.
-    //   uvm_config_db#(virtual my_cmd_if)::set(null, "*", "cmd_vif", cmd_if_i);
     // =========================================================================
+    uvm_config_db#(virtual j3_cmd_if)::set(null, "*", "cmd_vif", cmd_if_i);
+    uvm_config_db#(virtual j3_data_if)::set(null, "*", "dout_vif", dout_if_i);
+    uvm_config_db#(virtual sgdma_sts_if)::set(null, "*", "sts_vif", sts_if_i);
 
     run_test();
   end
