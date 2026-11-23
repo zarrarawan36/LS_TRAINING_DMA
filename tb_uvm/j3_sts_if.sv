@@ -1,34 +1,41 @@
+`timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// j3_sts_item : transaction for the 'sts' port group (status channel)
-//
-// STATUS : initial implementation (fields/printing/compare/copy)
-// Spec   : SPEC-00 status channel, SPEC-06 (MRD-STS-*, MRD-CMD-002, MRD-ERR-*)
+// sgdma_sts_if : status channel interface for sgdma_mm_rd
+//   DUT ports: sts (out, sgdma_sts_t), sts_valid (out), sts_ready (in)
+//   Suggested config_db name: "sts_vif"
+// Spec references: SPEC-00 (valid/ready status channel), SPEC-06, tb_connections
 // -----------------------------------------------------------------------------
-// One transaction represents one accepted status handshake (valid && ready):
-//   sts payload: desc_id, eop_seen, err, bytes_done (DUT outputs)
-// For mm_rd, eop_seen is 0; illegal cmd => err=1, bytes_done=0, eop_seen=0.
-// -----------------------------------------------------------------------------
-class j3_sts_item extends uvm_sequence_item;
+interface sgdma_sts_if (input logic clk, input logic rst_n);
+  import sgdma_pkg::*;
 
-  bit [7:0]  desc_id;
-  bit        eop_seen;
-  bit        err;
-  bit [15:0] bytes_done;
+  sgdma_sts_t sts;
+  logic       valid;   // sts_valid
+  logic       ready;   // sts_ready
 
-  `uvm_object_utils_begin(j3_sts_item)
-    `uvm_field_int(desc_id,    UVM_ALL_ON)
-    `uvm_field_int(eop_seen,   UVM_ALL_ON)
-    `uvm_field_int(err,        UVM_ALL_ON)
-    `uvm_field_int(bytes_done, UVM_ALL_ON)
-  `uvm_object_utils_end
+  // Driver clocking (TB receiver drives ready, samples status/valid)
+  clocking cb_drv @(posedge clk);
+    default input #1step output #0;
+    input  sts;
+    input  valid;
+    output ready;
+  endclocking
 
-  function new(string name = "j3_sts_item");
-    super.new(name);
-  endfunction
+  // Monitor clocking (samples all channel signals)
+  clocking cb_mon @(posedge clk);
+    default input #1step output #0;
+    input sts;
+    input valid;
+    input ready;
+  endclocking
 
-  virtual function string convert2string();
-    return $sformatf("sts{desc_id=0x%0h eop_seen=%0b err=%0b bytes_done=%0d}",
-                     desc_id, eop_seen, err, bytes_done);
-  endfunction
+  modport drv (clocking cb_drv, input clk, input rst_n);
+  modport mon (clocking cb_mon, input clk, input rst_n);
 
-endclass : j3_sts_item
+  // Optional protocol checks (enable/refine as needed)
+  // property p_sts_stable;
+  //   @(posedge clk) disable iff (!rst_n)
+  //     (valid && !ready) |=> (valid && $stable(sts));
+  // endproperty
+  // assert property (p_sts_stable);
+
+endinterface : sgdma_sts_if

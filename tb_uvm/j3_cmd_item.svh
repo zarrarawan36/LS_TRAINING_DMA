@@ -1,41 +1,59 @@
-`timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// sgdma_sts_if : status channel interface for sgdma_mm_rd
-//   DUT ports: sts (out, sgdma_sts_t), sts_valid (out), sts_ready (in)
-//   Suggested config_db name: "sts_vif"
-// Spec references: SPEC-00 (valid/ready status channel), SPEC-06, tb_connections
+// j3_cmd_item : transaction for the 'cmd' port group (command channel)
+//
+// Spec   : SPEC-00 command channel, SPEC-06 (MRD-CMD-*, burst/data behavior)
 // -----------------------------------------------------------------------------
-interface sgdma_sts_if (input logic clk, input logic rst_n);
-  import sgdma_pkg::*;
+// One transaction represents one command on the cmd interface
+// (desc_id/gen_eop/gen_sop/inc_addr/len_bytes/addr), driven by the TB and
+// sampled by the monitor on a valid && ready handshake.
+// -----------------------------------------------------------------------------
+class j3_cmd_item extends uvm_sequence_item;
 
-  sgdma_sts_t sts;
-  logic       valid;   // sts_valid
-  logic       ready;   // sts_ready
+  rand bit [31:0] addr;
+  rand bit [15:0] len_bytes;
+  rand bit        inc_addr;
+  rand bit        gen_sop;
+  rand bit        gen_eop;
+  rand bit [7:0]  desc_id;
 
-  // Driver clocking (TB receiver drives ready, samples status/valid)
-  clocking cb_drv @(posedge clk);
-    default input #1step output #0;
-    input  sts;
-    input  valid;
-    output ready;
-  endclocking
+  `uvm_object_utils_begin(j3_cmd_item)
+    `uvm_field_int(addr,      UVM_ALL_ON)
+    `uvm_field_int(len_bytes, UVM_ALL_ON)
+    `uvm_field_int(inc_addr,  UVM_ALL_ON)
+    `uvm_field_int(gen_sop,   UVM_ALL_ON)
+    `uvm_field_int(gen_eop,   UVM_ALL_ON)
+    `uvm_field_int(desc_id,   UVM_ALL_ON)
+  `uvm_object_utils_end
 
-  // Monitor clocking (samples all channel signals)
-  clocking cb_mon @(posedge clk);
-    default input #1step output #0;
-    input sts;
-    input valid;
-    input ready;
-  endclocking
+  function new(string name = "j3_cmd_item");
+    super.new(name);
+  endfunction
 
-  modport drv (clocking cb_drv, input clk, input rst_n);
-  modport mon (clocking cb_mon, input clk, input rst_n);
+  virtual function string convert2string();
+    return $sformatf("cmd{desc_id=0x%0h addr=0x%08h len=%0d inc=%0b sop=%0b eop=%0b}",
+                     desc_id, addr, len_bytes, inc_addr, gen_sop, gen_eop);
+  endfunction
 
-  // Optional protocol checks (enable/refine as needed)
-  // property p_sts_stable;
-  //   @(posedge clk) disable iff (!rst_n)
-  //     (valid && !ready) |=> (valid && $stable(sts));
-  // endproperty
-  // assert property (p_sts_stable);
+  // Populate fields from an sgdma_cmd_t struct.
+  virtual function void set_from_cmd(input sgdma_cmd_t cmd);
+    addr      = cmd.addr;
+    len_bytes = cmd.len_bytes;
+    inc_addr  = cmd.inc_addr;
+    gen_sop   = cmd.gen_sop;
+    gen_eop   = cmd.gen_eop;
+    desc_id   = cmd.desc_id;
+  endfunction
 
-endinterface : sgdma_sts_if
+  // Convert fields to an sgdma_cmd_t struct.
+  virtual function sgdma_cmd_t get_cmd();
+    sgdma_cmd_t cmd;
+    cmd.addr      = addr;
+    cmd.len_bytes = len_bytes;
+    cmd.inc_addr  = inc_addr;
+    cmd.gen_sop   = gen_sop;
+    cmd.gen_eop   = gen_eop;
+    cmd.desc_id   = desc_id;
+    return cmd;
+  endfunction
+
+endclass : j3_cmd_item
