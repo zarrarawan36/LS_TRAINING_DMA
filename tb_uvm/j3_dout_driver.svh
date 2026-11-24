@@ -7,7 +7,7 @@ class j3_dout_driver extends uvm_driver #(j3_dout_item);
 
   `uvm_component_utils(j3_dout_driver)
 
-  virtual j3_data_if vif;
+  virtual sgdma_data_if vif;
 
   // Default ready behavior: 1 => always ready.
   bit always_ready = 1'b1;
@@ -18,7 +18,7 @@ class j3_dout_driver extends uvm_driver #(j3_dout_item);
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    if (!uvm_config_db#(virtual j3_data_if)::get(this, "", "dout_vif", vif) || vif == null)
+    if (!uvm_config_db#(virtual sgdma_data_if)::get(this, "", "dout_vif", vif) || vif == null)
       `uvm_fatal("J3_DOUT_DRV", "dout_vif not found in config_db")
   endfunction
 

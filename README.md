@@ -1,4 +1,4 @@
-﻿# J3 SGDMA MM Read (`sgdma_mm_rd`) Verification Workspace
+# J3 SGDMA MM Read (`sgdma_mm_rd`) Verification Workspace
 
 This repository contains a UVM-based verification workspace for the **J3 SGDMA Memory-Mapped Read (MM-RD)** engine. It includes the RTL/package, a reusable DV library, harness/testbench integration, channel interfaces and UVM components (items/agents/drivers/monitors), tests, documentation/specs, and a verification test plan.
 
@@ -40,7 +40,7 @@ At a high level, the verification environment around the DUT includes:
 
 ## Key `tb_uvm` components
 
-- **Interfaces** (`j3_cmd_if.sv`, `j3_data_if.sv`, `j3_sts_if.sv`): channel signal bundles/clocking for cmd, dout, and status.
+- **Interfaces** (`sgdma_cmd_if.sv`, `sgdma_data_if.sv`, `sgdma_sts_if.sv`): channel signal bundles/clocking for cmd, dout, and status.
 - **Transactions/items** (`j3_cmd_item.svh`, `j3_dout_item.svh`, `j3_sts_item.svh`): payload-level sequence items for command, data beats, and status (including `sgdma_cmd_t` / `sgdma_sts_t` helpers where applicable).
 - **Agents** (`j3_*_agent.svh`): per-channel agents with sequencer/driver/monitor in active mode and monitor in passive mode.
 - **Drivers** (`j3_*_driver.svh`): cmd driver performs valid/ready command handshakes; dout/sts drivers provide TB-side `ready` control for DUT-output channels.

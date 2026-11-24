@@ -4,9 +4,9 @@
 //   1. your interfaces (they are used by your packages and by tb_top)
 //   2. your env package, then your test package
 // -----------------------------------------------------------------------------
-../tb_uvm/j3_cmd_if.sv
-../tb_uvm/j3_data_if.sv
-../tb_uvm/j3_sts_if.sv
+../tb_uvm/sgdma_cmd_if.sv
+../tb_uvm/sgdma_data_if.sv
+../tb_uvm/sgdma_sts_if.sv
 
 +incdir+../tb_uvm
 +incdir+../tests

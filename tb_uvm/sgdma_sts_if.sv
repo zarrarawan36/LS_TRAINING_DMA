@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// sgdma_sts_if : status channel interface for sgdma_mm_rd
+// sgdma_sts_if : status channel interface for j3_mm_rd
 //   DUT ports: sts (out, sgdma_sts_t), sts_valid (out), sts_ready (in)
 //   Suggested config_db name: "sts_vif"
 // Spec references: SPEC-00 (valid/ready status channel), SPEC-06, tb_connections

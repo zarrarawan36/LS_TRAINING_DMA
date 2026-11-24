@@ -8,7 +8,7 @@ class j3_dout_monitor extends uvm_monitor;
   `uvm_component_utils(j3_dout_monitor)
 
   uvm_analysis_port #(j3_dout_item) ap;
-  virtual j3_data_if vif;
+  virtual sgdma_data_if vif;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -17,7 +17,7 @@ class j3_dout_monitor extends uvm_monitor;
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    if (!uvm_config_db#(virtual j3_data_if)::get(this, "", "dout_vif", vif) || vif == null)
+    if (!uvm_config_db#(virtual sgdma_data_if)::get(this, "", "dout_vif", vif) || vif == null)
       `uvm_fatal("J3_DOUT_MON", "dout_vif not found in config_db")
   endfunction
 

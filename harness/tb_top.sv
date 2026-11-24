@@ -58,9 +58,10 @@ module tb_top;
   //   One interface per signal group listed on the TB connections page, e.g.
   //     my_cmd_if cmd_if_i (.clk(clk), .rst_n(rst_n));
   // ===========================================================================
-  j3_cmd_if    cmd_if_i  (.clk(clk), .rst_n(rst_n));
-  j3_data_if   dout_if_i (.clk(clk), .rst_n(rst_n));
+  sgdma_cmd_if    cmd_if_i  (.clk(clk), .rst_n(rst_n));
+  sgdma_data_if   dout_if_i (.clk(clk), .rst_n(rst_n));
   sgdma_sts_if sts_if_i  (.clk(clk), .rst_n(rst_n));
+
 
 
   // ---------------------------------------------------------------------------
@@ -134,8 +135,8 @@ module tb_top;
     // =========================================================================
     // TODO [3/3]: uvm_config_db::set your vifs here (BEFORE run_test)
     // =========================================================================
-    uvm_config_db#(virtual j3_cmd_if)::set(null, "*", "cmd_vif", cmd_if_i);
-    uvm_config_db#(virtual j3_data_if)::set(null, "*", "dout_vif", dout_if_i);
+    uvm_config_db#(virtual sgdma_cmd_if)::set(null, "*", "cmd_vif", cmd_if_i);
+    uvm_config_db#(virtual sgdma_data_if)::set(null, "*", "dout_vif", dout_if_i);
     uvm_config_db#(virtual sgdma_sts_if)::set(null, "*", "sts_vif", sts_if_i);
 
     run_test();

@@ -1,11 +1,11 @@
 `timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// j3_data_if : data-beat channel interface (used for dout)
+// sgdma_data_if : data-beat channel interface (used for dout)
 //   DUT ports: dout_data/out, dout_keep/out, dout_last/out, dout_valid/out, dout_ready/in
 //   Suggested config_db name: "dout_vif"
 // Spec references: SPEC-00 (valid/ready data-beat channel), SPEC-06, tb_connections
 // -----------------------------------------------------------------------------
-interface j3_data_if (input logic clk, input logic rst_n);
+interface sgdma_data_if (input logic clk, input logic rst_n);
 
   logic [31:0] data;   // dout_data
   logic [3:0]  keep;   // dout_keep
@@ -43,4 +43,4 @@ interface j3_data_if (input logic clk, input logic rst_n);
   // endproperty
   // assert property (p_data_stable);
 
-endinterface : j3_data_if
+endinterface : sgdma_data_if

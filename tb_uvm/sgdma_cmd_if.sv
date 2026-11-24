@@ -1,15 +1,15 @@
 `timescale 1ns/1ps
 // -----------------------------------------------------------------------------
-// j3_cmd_if : command channel interface for j3_mm_rd
-//   DUT ports: cmd (in, j3_cmd_t), cmd_valid (in), cmd_ready (out)
+// sgdma_cmd_if : command channel interface for j3_mm_rd
+//   DUT ports: cmd (in, sgdma_cmd_t), cmd_valid (in), cmd_ready (out)
 //   Suggested config_db name: "cmd_vif"
 // Spec references: SPEC-00 (valid/ready command channel), SPEC-06, tb_connections
 // -----------------------------------------------------------------------------
-interface j3_cmd_if (input logic clk, input logic rst_n);
+interface sgdma_cmd_if (input logic clk, input logic rst_n);
 
-  import j3_pkg::*;
+  import sgdma_pkg::*;
 
-  j3_cmd_t cmd;
+  sgdma_cmd_t cmd;
   logic       valid;   // cmd_valid
   logic       ready;   // cmd_ready
 
@@ -39,4 +39,4 @@ interface j3_cmd_if (input logic clk, input logic rst_n);
   // endproperty
   // assert property (p_cmd_stable);
 
-endinterface : j3_cmd_if
+endinterface : sgdma_cmd_if

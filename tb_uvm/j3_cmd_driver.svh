@@ -7,7 +7,7 @@ class j3_cmd_driver extends uvm_driver #(j3_cmd_item);
 
   `uvm_component_utils(j3_cmd_driver)
 
-  virtual j3_cmd_if vif;
+  virtual sgdma_cmd_if vif;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -15,7 +15,7 @@ class j3_cmd_driver extends uvm_driver #(j3_cmd_item);
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    if (!uvm_config_db#(virtual j3_cmd_if)::get(this, "", "cmd_vif", vif) || vif == null)
+    if (!uvm_config_db#(virtual sgdma_cmd_if)::get(this, "", "cmd_vif", vif) || vif == null)
       `uvm_fatal("J3_CMD_DRV", "cmd_vif not found in config_db")
   endfunction
 
