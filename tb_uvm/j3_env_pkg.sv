@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+﻿`timescale 1ns/1ps
 // -----------------------------------------------------------------------------
 // j3_env_pkg : your environment package
 //
@@ -29,6 +29,7 @@ package j3_env_pkg;
   `include "j3_ref_model.svh"
   `include "j3_scoreboard.svh"
   `include "j3_coverage.svh"
+  `include "j3_virtual_sequencer.svh"
   `include "j3_env.svh"
   `include "j3_seq_lib.svh"
 
