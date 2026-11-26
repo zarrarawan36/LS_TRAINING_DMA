@@ -29,6 +29,7 @@ class j3_sts_monitor extends uvm_monitor;
       if (vif.cb_mon.valid === 1'b1 && vif.cb_mon.ready === 1'b1) begin
         tr = j3_sts_item::type_id::create("sts_tr", this);
         tr.set_from_sts(vif.cb_mon.sts);
+        `uvm_info("J3_STS_MON", $sformatf("Observed STS: %s", tr.convert2string()), UVM_LOW)
         ap.write(tr);
       end
     end

@@ -28,11 +28,10 @@ class j3_dout_monitor extends uvm_monitor;
       if (vif.rst_n !== 1'b1) continue;
       if (vif.cb_mon.valid === 1'b1 && vif.cb_mon.ready === 1'b1) begin
         tr = j3_dout_item::type_id::create("dout_tr", this);
-        tr.data = '0;
-        tr.keep = '0;
         tr.data = vif.cb_mon.data;
         tr.keep = vif.cb_mon.keep;
         tr.last = vif.cb_mon.last;
+        `uvm_info("J3_DOUT_MON", $sformatf("Observed DOUT: %s", tr.convert2string()), UVM_LOW)
         ap.write(tr);
       end
     end

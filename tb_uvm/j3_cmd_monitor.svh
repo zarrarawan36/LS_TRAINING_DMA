@@ -34,6 +34,7 @@ class j3_cmd_monitor extends uvm_monitor;
         tr.gen_sop   = vif.cb_mon.cmd.gen_sop;
         tr.gen_eop   = vif.cb_mon.cmd.gen_eop;
         tr.desc_id   = vif.cb_mon.cmd.desc_id;
+        `uvm_info("J3_CMD_MON", $sformatf("Observed CMD: %s", tr.convert2string()), UVM_LOW)
         ap.write(tr);
       end
     end
