@@ -1,14 +1,7 @@
-// -----------------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------------
 // j3_first_test : your first directed test
 //
-// STATUS : SKELETON - structure only. Everything marked TODO is yours.
 // Spec   : your test plan, first row of section Tests
-// -----------------------------------------------------------------------------
-//
-//   Goal: ONE simple, legal transaction through the DUT, checked by the
-//   scoreboard. Make this pass (and understand the waveform) before writing
-//   anything random.
-//   Run:  cd sim && make run TEST=j3_first_test SEED=1
 // -----------------------------------------------------------------------------
 class j3_first_test extends j3_base_test;
 
@@ -19,8 +12,14 @@ class j3_first_test extends j3_base_test;
   endfunction
 
   virtual task body();
-    // TODO: create a sequence and start it on an agent sequencer
-    `uvm_info("TEST", "TODO: j3_first_test does nothing yet", UVM_LOW)
+    j3_single_cmd_vseq vseq;
+    vseq = j3_single_cmd_vseq::type_id::create("vseq");
+
+    if (env == null || env.vseqr == null)
+      `uvm_fatal("TEST", "virtual sequencer (env.vseqr) not available")
+
+    `uvm_info("TEST", "Starting j3_single_cmd_vseq (first directed command)", UVM_LOW)
+    vseq.start(env.vseqr);
   endtask
 
 endclass : j3_first_test

@@ -48,7 +48,7 @@ class j3_base_test extends uvm_test;
     phase.raise_objection(this);
     rst_vif.wait_reset_released();
     body();
-    repeat (drain_cycles) @(posedge rst_vif.clk);
+    repeat (drain_cycles) @(posedge rst_vif.clk); 
     phase.drop_objection(this);
   endtask
 

@@ -1,5 +1,19 @@
-# regress.list : one run per line  "<test name> <seed>"   ('#' = comment)
+﻿# regress.list : one run per line  "<test name> <seed>"   ('#' = comment)
 # make regress   runs them all and prints a PASS/FAIL summary
 j3_harness_smoke_test 1
 j3_base_test 1
 j3_first_test 1
+j3_illegal_cmd_test 1
+j3_rand_test 1
+j3_burstsplit_test 1
+j3_fixed_addr_test 1
+j3_error_resp_test 1
+j3_dout_backpressure_test 1
+j3_sts_backpressure_test 1
+j3_mem_stall_test 1
+j3_rand_stress_test 1
+j3_reset_test 1
+j3_keep_last_test 1
+j3_back2back_test 1
+j3_maxlen_test 1
+j3_cmd_fields_test 1
